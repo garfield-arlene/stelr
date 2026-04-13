@@ -11,7 +11,6 @@ version: "3.9"
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  build: .
   image: stelr:1.0.0
   restart: unless-stopped
   ports:
