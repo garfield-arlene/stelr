@@ -1,58 +1,50 @@
 import os
 import uuid
 import logging
-import psycopg2
-import psycopg2.extras
+import mysql.connector
 from typing import List, Dict, Any
 from plugins.base import StoragePlugin
 
 logger = logging.getLogger(__name__)
 
 
-class PostgresqlPlugin(StoragePlugin):
+class MysqlPlugin(StoragePlugin):
     def __init__(self):
-        self.host     = os.environ.get("POSTGRES_HOST", "postgres")
-        self.port     = os.environ.get("POSTGRES_PORT", "5432")
-        self.database = os.environ.get("POSTGRES_DB", "stelr")
-        self.user     = os.environ.get("POSTGRES_USER", "stelr")
-        self.password = os.environ.get("POSTGRES_PASSWORD", "stelr")
+        self.host     = os.environ.get("MYSQL_HOST", "mysql")
+        self.port     = int(os.environ.get("MYSQL_PORT", "3306"))
+        self.user     = os.environ.get("MYSQL_USER", "stelr")
+        self.password = os.environ.get("MYSQL_PASSWORD", "stelr")
+        self.database = os.environ.get("MYSQL_DATABASE", "stelr")
         self._bootstrap()
 
-    def _dsn(self, database: str = None) -> str:
-        db = database or self.database
-        return (
-            f"host={self.host} port={self.port} dbname={db} "
-            f"user={self.user} password={self.password}"
+    def _root_conn(self):
+        return mysql.connector.connect(
+            host=self.host, port=self.port,
+            user=self.user, password=self.password,
         )
 
-    def _conn(self, database: str = None):
-        return psycopg2.connect(self._dsn(database))
+    def _conn(self):
+        return mysql.connector.connect(
+            host=self.host, port=self.port,
+            user=self.user, password=self.password,
+            database=self.database,
+        )
 
     def _bootstrap(self):
-        # 1. Create the database if it doesn't exist.
-        #    Connect to the default 'postgres' maintenance db first.
         try:
-            conn = self._conn(database="postgres")
-            conn.autocommit = True          # CREATE DATABASE cannot run in a transaction
+            conn = self._root_conn()
             cur = conn.cursor()
             cur.execute(
-                "SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s",
-                (self.database,)
+                f"CREATE DATABASE IF NOT EXISTS `{self.database}` "
+                f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
             )
-            exists = cur.fetchone()
-            if not exists:
-                logger.info(f"[postgresql] Database '{self.database}' not found — creating.")
-                cur.execute(f'CREATE DATABASE "{self.database}"')
-            else:
-                logger.info(f"[postgresql] Database '{self.database}' already exists.")
+            conn.commit()
             cur.close()
             conn.close()
+            logger.info(f"[mysql] Database '{self.database}' ready.")
         except Exception as e:
-            raise RuntimeError(
-                f"[postgresql] Could not connect to maintenance DB or create database: {e}"
-            )
+            raise RuntimeError(f"[mysql] Could not connect or create database: {e}")
 
-        # 2. Create the table if it doesn't exist
         try:
             conn = self._conn()
             cur = conn.cursor()
@@ -62,23 +54,22 @@ class PostgresqlPlugin(StoragePlugin):
                     title VARCHAR(512) NOT NULL,
                     url   TEXT         NOT NULL,
                     rank  INT          DEFAULT 0
-                )
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
             conn.commit()
-
             cur.execute("SELECT COUNT(*) FROM links")
             count = cur.fetchone()[0]
             cur.close()
             conn.close()
-            logger.info(f"[postgresql] Table 'links' ready ({count} existing rows).")
+            logger.info(f"[mysql] Table 'links' ready ({count} existing rows).")
         except Exception as e:
-            raise RuntimeError(f"[postgresql] Could not create table: {e}")
+            raise RuntimeError(f"[mysql] Could not create table: {e}")
 
     def get_all(self) -> List[Dict[str, Any]]:
         conn = self._conn()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id, title, url, rank FROM links ORDER BY rank ASC")
-        rows = [dict(r) for r in cur.fetchall()]
+        rows = cur.fetchall()
         cur.close()
         conn.close()
         return rows

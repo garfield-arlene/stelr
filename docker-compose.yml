@@ -18,7 +18,6 @@ x-app-base: &app-base
 
 services:
 
-  # ── XML backend (default, no DB needed) ──
   app-xml:
     <<: *app-base
     container_name: stelr
@@ -29,7 +28,6 @@ services:
       - stelrdata:/data
     profiles: ["", "xml"]
 
-  # ── YAML backend ──
   app-yaml:
     <<: *app-base
     container_name: stelr
@@ -40,7 +38,6 @@ services:
       - stelrdata:/data
     profiles: ["yaml"]
 
-  # ── HTML backend ──
   app-html:
     <<: *app-base
     container_name: stelr
@@ -51,7 +48,6 @@ services:
       - stelrdata:/data
     profiles: ["html"]
 
-  # ── MySQL backend ──
   app-mysql:
     <<: *app-base
     container_name: stelr
@@ -85,7 +81,6 @@ services:
       retries: 10
     profiles: ["mysql"]
 
-  # ── PostgreSQL backend ──
   app-postgresql:
     <<: *app-base
     container_name: stelr
@@ -122,4 +117,3 @@ volumes:
   stelrdata:
   mysql_data:
   pg_data:
-

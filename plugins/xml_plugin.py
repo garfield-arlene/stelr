@@ -19,7 +19,6 @@ class XmlPlugin(StoragePlugin):
         if not os.path.exists(data_dir):
             logger.info(f"[xml] Data directory '{data_dir}' not found — creating.")
             os.makedirs(data_dir, exist_ok=True)
-
         if not os.path.exists(DATA_FILE):
             logger.info(f"[xml] Data file '{DATA_FILE}' not found — creating empty store.")
             root = ET.Element("links")
@@ -27,14 +26,11 @@ class XmlPlugin(StoragePlugin):
             ET.indent(tree, space="  ")
             tree.write(DATA_FILE, encoding="unicode", xml_declaration=True)
         else:
-            # Validate the file is parseable
             try:
                 ET.parse(DATA_FILE)
                 logger.info(f"[xml] Existing data file '{DATA_FILE}' loaded OK.")
             except ET.ParseError as e:
-                raise RuntimeError(
-                    f"[xml] Data file '{DATA_FILE}' exists but is not valid XML: {e}"
-                )
+                raise RuntimeError(f"[xml] Data file '{DATA_FILE}' is not valid XML: {e}")
 
     def _load(self) -> ET.Element:
         return ET.parse(DATA_FILE).getroot()

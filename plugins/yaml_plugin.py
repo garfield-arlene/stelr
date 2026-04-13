@@ -19,25 +19,19 @@ class YamlPlugin(StoragePlugin):
         if not os.path.exists(data_dir):
             logger.info(f"[yaml] Data directory '{data_dir}' not found — creating.")
             os.makedirs(data_dir, exist_ok=True)
-
         if not os.path.exists(DATA_FILE):
             logger.info(f"[yaml] Data file '{DATA_FILE}' not found — creating empty store.")
             self._save([])
         else:
-            # Validate the file is parseable
             try:
                 with open(DATA_FILE, "r") as f:
                     data = yaml.safe_load(f)
                 if data is not None and not isinstance(data, list):
-                    raise RuntimeError(
-                        f"[yaml] Data file '{DATA_FILE}' exists but does not contain a list."
-                    )
+                    raise RuntimeError(f"[yaml] Data file '{DATA_FILE}' does not contain a list.")
                 logger.info(f"[yaml] Existing data file '{DATA_FILE}' loaded OK "
                             f"({len(data) if data else 0} entries).")
             except yaml.YAMLError as e:
-                raise RuntimeError(
-                    f"[yaml] Data file '{DATA_FILE}' exists but is not valid YAML: {e}"
-                )
+                raise RuntimeError(f"[yaml] Data file '{DATA_FILE}' is not valid YAML: {e}")
 
     def _load(self) -> List[Dict]:
         with open(DATA_FILE, "r") as f:

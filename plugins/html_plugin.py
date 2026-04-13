@@ -28,28 +28,21 @@ class HtmlPlugin(StoragePlugin):
         if not os.path.exists(data_dir):
             logger.info(f"[html] Data directory '{data_dir}' not found — creating.")
             os.makedirs(data_dir, exist_ok=True)
-
         if not os.path.exists(DATA_FILE):
             logger.info(f"[html] Data file '{DATA_FILE}' not found — creating empty store.")
             with open(DATA_FILE, "w") as f:
                 f.write(TEMPLATE)
         else:
-            # Validate the file contains the expected structure
             try:
                 with open(DATA_FILE, "r") as f:
                     soup = BeautifulSoup(f.read(), "html.parser")
                 if not soup.find("ul", id="links"):
                     raise RuntimeError(
-                        f"[html] Data file '{DATA_FILE}' exists but is missing "
-                        f"the required <ul id=\"links\"> element."
-                    )
+                        f"[html] Data file '{DATA_FILE}' is missing <ul id=\"links\">.")
                 count = len(soup.select("ul#links > li"))
-                logger.info(f"[html] Existing data file '{DATA_FILE}' loaded OK "
-                            f"({count} entries).")
+                logger.info(f"[html] Existing data file '{DATA_FILE}' loaded OK ({count} entries).")
             except Exception as e:
-                raise RuntimeError(
-                    f"[html] Data file '{DATA_FILE}' could not be parsed: {e}"
-                )
+                raise RuntimeError(f"[html] Data file '{DATA_FILE}' could not be parsed: {e}")
 
     def _load(self) -> BeautifulSoup:
         with open(DATA_FILE, "r") as f:
@@ -61,28 +54,26 @@ class HtmlPlugin(StoragePlugin):
 
     def get_all(self) -> List[Dict[str, Any]]:
         soup = self._load()
-        results = []
-        for li in soup.select("ul#links > li"):
-            results.append({
+        return [
+            {
                 "id":    li.get("data-id", ""),
                 "title": li.get("data-title", ""),
                 "url":   li.get("data-url", ""),
                 "rank":  int(li.get("data-rank", "0")),
-            })
-        return results
+            }
+            for li in soup.select("ul#links > li")
+        ]
 
     def add(self, link: Dict[str, Any]) -> str:
         soup = self._load()
         link_id = str(uuid.uuid4())
         ul = soup.find("ul", id="links")
-        li = soup.new_tag("li",
-            attrs={
-                "data-id":    link_id,
-                "data-title": link.get("title", ""),
-                "data-url":   link.get("url", ""),
-                "data-rank":  str(link.get("rank", 0)),
-            }
-        )
+        li = soup.new_tag("li", attrs={
+            "data-id":    link_id,
+            "data-title": link.get("title", ""),
+            "data-url":   link.get("url", ""),
+            "data-rank":  str(link.get("rank", 0)),
+        })
         a = soup.new_tag("a", href=link.get("url", ""))
         a.string = link.get("title", "")
         li.append(a)
