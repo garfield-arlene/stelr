@@ -19,6 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Install the stelr package (makes the plugins module resolvable)
+RUN pip install --no-cache-dir -e .
+
 # Data volume mount point
 RUN mkdir -p /data
 
