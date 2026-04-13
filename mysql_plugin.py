@@ -1,37 +1,73 @@
 import os
 import uuid
+import logging
 import mysql.connector
 from typing import List, Dict, Any
 from plugins.base import StoragePlugin
 
+logger = logging.getLogger(__name__)
+
+
 class MysqlPlugin(StoragePlugin):
     def __init__(self):
-        self.config = {
-            "host":     os.environ.get("MYSQL_HOST", "mysql"),
-            "port":     int(os.environ.get("MYSQL_PORT", "3306")),
-            "user":     os.environ.get("MYSQL_USER", "stelr"),
-            "password": os.environ.get("MYSQL_PASSWORD", "stelr"),
-            "database": os.environ.get("MYSQL_DATABASE", "stelr"),
-        }
-        self._init_db()
+        self.host     = os.environ.get("MYSQL_HOST", "mysql")
+        self.port     = int(os.environ.get("MYSQL_PORT", "3306"))
+        self.user     = os.environ.get("MYSQL_USER", "stelr")
+        self.password = os.environ.get("MYSQL_PASSWORD", "stelr")
+        self.database = os.environ.get("MYSQL_DATABASE", "stelr")
+        self._bootstrap()
+
+    def _root_conn(self):
+        """Connect without specifying a database (for schema bootstrap)."""
+        return mysql.connector.connect(
+            host=self.host, port=self.port,
+            user=self.user, password=self.password,
+        )
 
     def _conn(self):
-        return mysql.connector.connect(**self.config)
+        return mysql.connector.connect(
+            host=self.host, port=self.port,
+            user=self.user, password=self.password,
+            database=self.database,
+        )
 
-    def _init_db(self):
-        conn = self._conn()
-        cur = conn.cursor()
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS links (
-                id    VARCHAR(36) PRIMARY KEY,
-                title VARCHAR(512) NOT NULL,
-                url   TEXT NOT NULL,
-                rank  INT DEFAULT 0
+    def _bootstrap(self):
+        # 1. Create the database if it doesn't exist
+        try:
+            conn = self._root_conn()
+            cur = conn.cursor()
+            cur.execute(
+                f"CREATE DATABASE IF NOT EXISTS `{self.database}` "
+                f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
             )
-        """)
-        conn.commit()
-        cur.close()
-        conn.close()
+            conn.commit()
+            cur.close()
+            conn.close()
+            logger.info(f"[mysql] Database '{self.database}' ready.")
+        except Exception as e:
+            raise RuntimeError(f"[mysql] Could not connect or create database: {e}")
+
+        # 2. Create the table if it doesn't exist
+        try:
+            conn = self._conn()
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS links (
+                    id    VARCHAR(36)  PRIMARY KEY,
+                    title VARCHAR(512) NOT NULL,
+                    url   TEXT         NOT NULL,
+                    rank  INT          DEFAULT 0
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            conn.commit()
+
+            cur.execute("SELECT COUNT(*) FROM links")
+            count = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+            logger.info(f"[mysql] Table 'links' ready ({count} existing rows).")
+        except Exception as e:
+            raise RuntimeError(f"[mysql] Could not create table: {e}")
 
     def get_all(self) -> List[Dict[str, Any]]:
         conn = self._conn()

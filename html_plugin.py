@@ -1,8 +1,11 @@
 import os
 import uuid
+import logging
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
 from plugins.base import StoragePlugin
+
+logger = logging.getLogger(__name__)
 
 DATA_FILE = os.environ.get("HTML_FILE", "/data/links.html")
 
@@ -15,12 +18,38 @@ TEMPLATE = """<!DOCTYPE html>
 </body>
 </html>"""
 
+
 class HtmlPlugin(StoragePlugin):
     def __init__(self):
-        os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
+        self._bootstrap()
+
+    def _bootstrap(self):
+        data_dir = os.path.dirname(DATA_FILE)
+        if not os.path.exists(data_dir):
+            logger.info(f"[html] Data directory '{data_dir}' not found — creating.")
+            os.makedirs(data_dir, exist_ok=True)
+
         if not os.path.exists(DATA_FILE):
+            logger.info(f"[html] Data file '{DATA_FILE}' not found — creating empty store.")
             with open(DATA_FILE, "w") as f:
                 f.write(TEMPLATE)
+        else:
+            # Validate the file contains the expected structure
+            try:
+                with open(DATA_FILE, "r") as f:
+                    soup = BeautifulSoup(f.read(), "html.parser")
+                if not soup.find("ul", id="links"):
+                    raise RuntimeError(
+                        f"[html] Data file '{DATA_FILE}' exists but is missing "
+                        f"the required <ul id=\"links\"> element."
+                    )
+                count = len(soup.select("ul#links > li"))
+                logger.info(f"[html] Existing data file '{DATA_FILE}' loaded OK "
+                            f"({count} entries).")
+            except Exception as e:
+                raise RuntimeError(
+                    f"[html] Data file '{DATA_FILE}' could not be parsed: {e}"
+                )
 
     def _load(self) -> BeautifulSoup:
         with open(DATA_FILE, "r") as f:
