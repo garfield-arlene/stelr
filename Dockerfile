@@ -34,4 +34,4 @@ ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-CMD ["python", "-m", "gunicorn", "--chdir", "/app", "--bind", "0.0.0.0:5000", "--workers", "2", "--preload", "--log-level", "info", "app:app"]
+CMD ["python", "-m", "gunicorn", "--config", "/app/gunicorn.conf.py", "app:app"]
