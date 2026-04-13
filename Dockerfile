@@ -27,7 +27,8 @@ ENV STORAGE_BACKEND=xml
 ENV XML_FILE=/data/links.xml
 ENV YAML_FILE=/data/links.yaml
 ENV HTML_FILE=/data/links.html
+ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-CMD ["python", "-m", "gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "app:app"]
+CMD ["python", "-m", "gunicorn", "--chdir", "/app", "--bind", "0.0.0.0:5000", "--workers", "2", "--preload", "--log-level", "info", "app:app"]
