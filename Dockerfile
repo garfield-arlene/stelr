@@ -19,19 +19,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Install the stelr package (makes the plugins module resolvable)
-RUN pip install --no-cache-dir -e .
-
 # Data volume mount point
 RUN mkdir -p /data
+
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
 
 ENV FLASK_APP=app.py
 ENV STORAGE_BACKEND=xml
 ENV XML_FILE=/data/links.xml
 ENV YAML_FILE=/data/links.yaml
 ENV HTML_FILE=/data/links.html
-ENV PYTHONPATH=/app
 
 EXPOSE 5000
 
-CMD ["python", "-m", "gunicorn", "--config", "/app/gunicorn.conf.py", "app:app"]
+ENTRYPOINT ["/app/entrypoint.sh"]
