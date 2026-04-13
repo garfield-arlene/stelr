@@ -21,6 +21,7 @@ services:
   # ── XML backend (default, no DB needed) ──
   app-xml:
     <<: *app-base
+    container_name: stelr
     environment:
       STORAGE_BACKEND: xml
       XML_FILE: /data/links.xml
@@ -31,6 +32,7 @@ services:
   # ── YAML backend ──
   app-yaml:
     <<: *app-base
+    container_name: stelr
     environment:
       STORAGE_BACKEND: yaml
       YAML_FILE: /data/links.yaml
@@ -41,6 +43,7 @@ services:
   # ── HTML backend ──
   app-html:
     <<: *app-base
+    container_name: stelr
     environment:
       STORAGE_BACKEND: html
       HTML_FILE: /data/links.html
@@ -51,6 +54,7 @@ services:
   # ── MySQL backend ──
   app-mysql:
     <<: *app-base
+    container_name: stelr
     environment:
       STORAGE_BACKEND: mysql
       MYSQL_HOST: mysql
@@ -65,6 +69,7 @@ services:
 
   mysql:
     image: mysql:8.3
+    container_name: stelr-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
@@ -83,6 +88,7 @@ services:
   # ── PostgreSQL backend ──
   app-postgresql:
     <<: *app-base
+    container_name: stelr
     environment:
       STORAGE_BACKEND: postgresql
       POSTGRES_HOST: postgres
@@ -97,6 +103,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    container_name: stelr-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: stelr
