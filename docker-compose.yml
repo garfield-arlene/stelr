@@ -1,0 +1,119 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────
+# Stelr v1.0.0 — docker compose
+# Usage:
+#   XML (default):    docker compose up
+#   YAML:             docker compose --profile yaml up
+#   HTML:             docker compose --profile html up
+#   MySQL:            docker compose --profile mysql up
+#   PostgreSQL:       docker compose --profile postgresql up
+# ─────────────────────────────────────────────
+
+x-app-base: &app-base
+  image: stelr:1.0.0
+  restart: unless-stopped
+  ports:
+    - "5000:5000"
+
+services:
+
+  app-xml:
+    <<: *app-base
+    container_name: stelr
+    environment:
+      STORAGE_BACKEND: xml
+      XML_FILE: /data/links.xml
+    volumes:
+      - stelrdata:/data
+    profiles: ["", "xml"]
+
+  app-yaml:
+    <<: *app-base
+    container_name: stelr
+    environment:
+      STORAGE_BACKEND: yaml
+      YAML_FILE: /data/links.yaml
+    volumes:
+      - stelrdata:/data
+    profiles: ["yaml"]
+
+  app-html:
+    <<: *app-base
+    container_name: stelr
+    environment:
+      STORAGE_BACKEND: html
+      HTML_FILE: /data/links.html
+    volumes:
+      - stelrdata:/data
+    profiles: ["html"]
+
+  app-mysql:
+    <<: *app-base
+    container_name: stelr
+    environment:
+      STORAGE_BACKEND: mysql
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: stelr
+      MYSQL_PASSWORD: stelr
+      MYSQL_DATABASE: stelr
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles: ["mysql"]
+
+  mysql:
+    image: mysql:8.3
+    container_name: stelr-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: stelr
+      MYSQL_USER: stelr
+      MYSQL_PASSWORD: stelr
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "stelr", "-pstelr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles: ["mysql"]
+
+  app-postgresql:
+    <<: *app-base
+    container_name: stelr
+    environment:
+      STORAGE_BACKEND: postgresql
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: stelr
+      POSTGRES_USER: stelr
+      POSTGRES_PASSWORD: stelr
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["postgresql"]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: stelr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: stelr
+      POSTGRES_USER: stelr
+      POSTGRES_PASSWORD: stelr
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stelr"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles: ["postgresql"]
+
+volumes:
+  stelrdata:
+  mysql_data:
+  pg_data:
