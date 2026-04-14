@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-2025")
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 APP_NAME = "Stelr"
 
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "xml").lower()

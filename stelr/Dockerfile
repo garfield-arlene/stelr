@@ -7,7 +7,6 @@ LABEL org.opencontainers.image.title="stelr"
 LABEL org.opencontainers.image.version="2.0.0"
 LABEL org.opencontainers.image.ref.name="stelr:2.0.0"
 
-# System deps for lxml / psycopg2
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev libxml2-dev libxslt-dev \
     && rm -rf /var/lib/apt/lists/*
@@ -31,6 +30,9 @@ ENV XML_FILE=/data/links.xml
 ENV YAML_FILE=/data/links.yaml
 ENV HTML_FILE=/data/links.html
 ENV PYTHONPATH=/app
+ENV ADMIN_USERNAME=admin
+ENV ADMIN_PASSWORD=admin
+ENV SESSION_TIMEOUT_MINUTES=30
 
 EXPOSE 5000
 
