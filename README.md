@@ -22,6 +22,9 @@ title and a numeric rank — Stelr keeps them sorted and accessible from any bro
 
 Open **http://localhost:5000** in your browser.
 
+Dashboard
+![Stelr Dashboard](screenshots/Stelr_Interface_Dashboard_2026-04-13.png)
+
 ### Adding a link
 Fill in the **Title**, **URL**, and **Rank** fields at the top of the page and
 click **Add**. Rank is a number — lower numbers appear first. You can use any
@@ -30,6 +33,8 @@ numbering scheme you like (1, 2, 3 or 10, 20, 30, etc.).
 ### Editing a link
 Click the **Edit** button on any row to expand an inline edit form. Change the
 fields you want and click **Save**.
+
+![Editing a link](screenshots/Stelr_Edit_2026-04-13.png)
 
 ### Deleting a link
 Click the **Delete** button on any row. You will be asked to confirm before the
