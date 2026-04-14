@@ -19,7 +19,6 @@ app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
 APP_VERSION = "2.0.0"
 APP_NAME = "Stelr"
 
-# Session timeout — default 30 minutes, override with SESSION_TIMEOUT_MINUTES env var
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
 
@@ -36,8 +35,6 @@ login_manager.login_message_category = "info"
 
 @app.before_request
 def enforce_session_timeout():
-    """Make every session permanent so PERMANENT_SESSION_LIFETIME applies.
-    When the cookie expires Flask-Login automatically redirects to login."""
     session.permanent = True
 
 
@@ -55,8 +52,7 @@ def get_storage():
             "postgresql": ("plugins.postgresql_plugin", "PostgresqlPlugin"),
         }
         if STORAGE_BACKEND not in plugin_map:
-            raise ValueError(f"Unknown backend '{STORAGE_BACKEND}'. "
-                             f"Valid: {', '.join(plugin_map)}")
+            raise ValueError(f"Unknown backend '{STORAGE_BACKEND}'.")
         mod_path, cls_name = plugin_map[STORAGE_BACKEND]
         logger.info(f"Loading backend: {STORAGE_BACKEND}")
         try:
@@ -71,12 +67,15 @@ def get_storage():
 
 
 def _ensure_admin(storage):
-    """Create the admin account on first run if it doesn't exist."""
     existing = storage.get_user_by_username(ADMIN_USERNAME)
     if not existing:
         pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
-        storage.create_user(ADMIN_USERNAME, pw_hash, is_admin=True)
+        storage.create_user(ADMIN_USERNAME, pw_hash, is_admin=True, approved=True)
         logger.info(f"Admin account '{ADMIN_USERNAME}' created.")
+
+
+def registration_enabled():
+    return get_storage().get_setting("registration_enabled", "true") == "true"
 
 
 # ── Flask-Login user class ─────────────────────────────────────────────────
@@ -110,7 +109,8 @@ def login():
             return redirect(request.args.get("next") or url_for("index"))
         flash("Invalid username or password.", "error")
     return render_template("login.html", app_name=APP_NAME, version=APP_VERSION,
-                           timeout=SESSION_TIMEOUT_MINUTES)
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           reg_enabled=registration_enabled())
 
 
 @app.route("/logout")
@@ -125,6 +125,9 @@ def logout():
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("index"))
+    if not registration_enabled():
+        flash("Registration is currently disabled. Please contact an administrator.", "info")
+        return redirect(url_for("login"))
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -139,8 +142,8 @@ def register():
             flash("That username is already taken.", "error")
         else:
             pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-            get_storage().create_user(username, pw_hash, is_admin=False)
-            flash("Account created! Please log in.", "success")
+            get_storage().create_user(username, pw_hash, is_admin=False, approved=False)
+            flash("Registration submitted! Your account is pending admin approval.", "success")
             return redirect(url_for("login"))
     return render_template("register.html", app_name=APP_NAME, version=APP_VERSION)
 
@@ -208,11 +211,60 @@ def admin():
     if not current_user.is_admin:
         flash("Admin access required.", "error")
         return redirect(url_for("index"))
-    users = get_storage().get_all_users()
-    links = get_storage().get_all_links_admin()
-    return render_template("admin.html", users=users, links=links,
-                           backend=STORAGE_BACKEND, version=APP_VERSION,
-                           app_name=APP_NAME, timeout=SESSION_TIMEOUT_MINUTES)
+    storage = get_storage()
+    return render_template("admin.html",
+                           users=storage.get_all_users(),
+                           pending=storage.get_pending_users(),
+                           links=storage.get_all_links_admin(),
+                           backend=STORAGE_BACKEND,
+                           version=APP_VERSION,
+                           app_name=APP_NAME,
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           reg_enabled=registration_enabled())
+
+
+@app.route("/admin/create_user", methods=["POST"])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    is_admin = request.form.get("is_admin") == "1"
+    if not username or not password:
+        flash("Username and password are required.", "error")
+    elif len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+    elif get_storage().get_user_by_username(username):
+        flash(f"Username '{username}' is already taken.", "error")
+    else:
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        get_storage().create_user(username, pw_hash, is_admin=is_admin, approved=True)
+        flash(f"User '{username}' created successfully.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/approve_user/<user_id>", methods=["POST"])
+@login_required
+def admin_approve_user(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    get_storage().approve_user(user_id)
+    flash("User approved.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/reject_user/<user_id>", methods=["POST"])
+@login_required
+def admin_reject_user(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    get_storage().reject_user(user_id)
+    flash("Registration rejected and removed.", "info")
+    return redirect(url_for("admin"))
 
 
 @app.route("/admin/delete_user/<user_id>", methods=["POST"])
@@ -226,6 +278,18 @@ def admin_delete_user(user_id):
         return redirect(url_for("admin"))
     get_storage().delete_user(user_id)
     flash("User and their links deleted.", "info")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/toggle_registration", methods=["POST"])
+@login_required
+def admin_toggle_registration():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    current = registration_enabled()
+    get_storage().set_setting("registration_enabled", "false" if current else "true")
+    flash(f"Registration {'disabled' if current else 'enabled'}.", "success")
     return redirect(url_for("admin"))
 
 

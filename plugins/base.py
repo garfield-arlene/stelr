@@ -30,20 +30,45 @@ class StoragePlugin(ABC):
 
     @abstractmethod
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        """Return a user dict or None."""
+        """Return a user dict or None. Only returns approved/admin users."""
 
     @abstractmethod
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
-        """Return a user dict or None."""
+        """Return a user dict or None. Only returns approved/admin users."""
 
     @abstractmethod
-    def create_user(self, username: str, password_hash: str, is_admin: bool = False) -> str:
+    def create_user(self, username: str, password_hash: str,
+                    is_admin: bool = False, approved: bool = True) -> str:
         """Create a user and return their generated id."""
 
     @abstractmethod
     def get_all_users(self) -> List[Dict[str, Any]]:
-        """Return all users (admin only)."""
+        """Return all approved (non-pending) users (admin only)."""
 
     @abstractmethod
     def delete_user(self, user_id: str) -> None:
         """Delete a user and all their links."""
+
+    # ── Pending registrations ──────────────────────────────────────────────
+
+    @abstractmethod
+    def get_pending_users(self) -> List[Dict[str, Any]]:
+        """Return all users awaiting approval."""
+
+    @abstractmethod
+    def approve_user(self, user_id: str) -> None:
+        """Mark a pending user as approved."""
+
+    @abstractmethod
+    def reject_user(self, user_id: str) -> None:
+        """Delete a pending user registration."""
+
+    # ── Settings ───────────────────────────────────────────────────────────
+
+    @abstractmethod
+    def get_setting(self, key: str, default: str = "") -> str:
+        """Return a stored setting value."""
+
+    @abstractmethod
+    def set_setting(self, key: str, value: str) -> None:
+        """Store a setting value."""

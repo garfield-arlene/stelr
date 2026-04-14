@@ -33,7 +33,6 @@ class PostgresqlPlugin(StoragePlugin):
             cur = conn.cursor()
             cur.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (self.database,))
             if not cur.fetchone():
-                logger.info(f"[postgresql] Creating database '{self.database}'.")
                 cur.execute(f'CREATE DATABASE "{self.database}"')
             cur.close(); conn.close()
         except Exception as e:
@@ -47,7 +46,8 @@ class PostgresqlPlugin(StoragePlugin):
                     id            VARCHAR(36)  PRIMARY KEY,
                     username      VARCHAR(128) NOT NULL UNIQUE,
                     password_hash VARCHAR(256) NOT NULL,
-                    is_admin      BOOLEAN      DEFAULT FALSE
+                    is_admin      BOOLEAN      DEFAULT FALSE,
+                    approved      BOOLEAN      DEFAULT TRUE
                 )
             """)
             cur.execute("""
@@ -59,19 +59,50 @@ class PostgresqlPlugin(StoragePlugin):
                     rank    INT          DEFAULT 0
                 )
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    key   VARCHAR(128) PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+            # Migrate: add approved column if missing
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name='users' AND column_name='approved'
+            """)
+            if not cur.fetchone():
+                cur.execute("ALTER TABLE users ADD COLUMN approved BOOLEAN DEFAULT TRUE")
             conn.commit()
             cur.close(); conn.close()
-            logger.info(f"[postgresql] Tables ready.")
+            logger.info("[postgresql] Tables ready.")
         except Exception as e:
             raise RuntimeError(f"[postgresql] Could not create tables: {e}")
+
+    # ── Settings ───────────────────────────────────────────────────────────
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM settings WHERE key=%s", (key,))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        return row[0] if row else default
+
+    def set_setting(self, key: str, value: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO settings (key, value) VALUES (%s,%s) "
+                    "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, value))
+        conn.commit()
+        cur.close(); conn.close()
 
     # ── Users ──────────────────────────────────────────────────────────────
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id, username, password_hash, is_admin FROM users WHERE id=%s",
-                    (user_id,))
+        cur.execute("SELECT id, username, password_hash, is_admin, approved "
+                    "FROM users WHERE id=%s AND approved=TRUE", (user_id,))
         row = cur.fetchone()
         cur.close(); conn.close()
         return dict(row) if row else None
@@ -79,18 +110,20 @@ class PostgresqlPlugin(StoragePlugin):
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id, username, password_hash, is_admin FROM users WHERE username=%s",
-                    (username,))
+        cur.execute("SELECT id, username, password_hash, is_admin, approved "
+                    "FROM users WHERE username=%s AND approved=TRUE", (username,))
         row = cur.fetchone()
         cur.close(); conn.close()
         return dict(row) if row else None
 
-    def create_user(self, username: str, password_hash: str, is_admin: bool = False) -> str:
+    def create_user(self, username: str, password_hash: str,
+                    is_admin: bool = False, approved: bool = True) -> str:
         conn = self._conn()
         cur = conn.cursor()
         user_id = str(uuid.uuid4())
-        cur.execute("INSERT INTO users (id, username, password_hash, is_admin) VALUES (%s,%s,%s,%s)",
-                    (user_id, username, password_hash, is_admin))
+        cur.execute("INSERT INTO users (id, username, password_hash, is_admin, approved) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (user_id, username, password_hash, is_admin, approved))
         conn.commit()
         cur.close(); conn.close()
         return user_id
@@ -98,7 +131,8 @@ class PostgresqlPlugin(StoragePlugin):
     def get_all_users(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT id, username, is_admin FROM users ORDER BY username")
+        cur.execute("SELECT id, username, is_admin, approved FROM users "
+                    "WHERE approved=TRUE ORDER BY username")
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return rows
@@ -110,13 +144,35 @@ class PostgresqlPlugin(StoragePlugin):
         conn.commit()
         cur.close(); conn.close()
 
+    def get_pending_users(self) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT id, username FROM users WHERE approved=FALSE ORDER BY username")
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return rows
+
+    def approve_user(self, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET approved=TRUE WHERE id=%s", (user_id,))
+        conn.commit()
+        cur.close(); conn.close()
+
+    def reject_user(self, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users WHERE id=%s AND approved=FALSE", (user_id,))
+        conn.commit()
+        cur.close(); conn.close()
+
     # ── Links ──────────────────────────────────────────────────────────────
 
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT id, user_id, title, url, rank FROM links "
-                    "WHERE user_id=%s ORDER BY rank ASC", (user_id,))
+                    "WHERE user_id=%s ORDER BY rank", (user_id,))
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); conn.close()
         return rows

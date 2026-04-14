@@ -35,9 +35,7 @@ class MysqlPlugin(StoragePlugin):
             cur.execute(f"CREATE DATABASE IF NOT EXISTS `{self.database}` "
                         f"CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
             conn.commit()
-            cur.close()
-            conn.close()
-            logger.info(f"[mysql] Database '{self.database}' ready.")
+            cur.close(); conn.close()
         except Exception as e:
             raise RuntimeError(f"[mysql] Could not create database: {e}")
 
@@ -49,7 +47,8 @@ class MysqlPlugin(StoragePlugin):
                     id            VARCHAR(36)  PRIMARY KEY,
                     username      VARCHAR(128) NOT NULL UNIQUE,
                     password_hash VARCHAR(256) NOT NULL,
-                    is_admin      TINYINT(1)   DEFAULT 0
+                    is_admin      TINYINT(1)   DEFAULT 0,
+                    approved      TINYINT(1)   DEFAULT 1
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
             cur.execute("""
@@ -62,43 +61,70 @@ class MysqlPlugin(StoragePlugin):
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS settings (
+                    `key`   VARCHAR(128) PRIMARY KEY,
+                    `value` TEXT
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
+            # Migrate: add approved column if missing
+            cur.execute("SHOW COLUMNS FROM users LIKE 'approved'")
+            if not cur.fetchone():
+                cur.execute("ALTER TABLE users ADD COLUMN approved TINYINT(1) DEFAULT 1")
             conn.commit()
-            cur.close()
-            conn.close()
-            logger.info(f"[mysql] Tables ready.")
+            cur.close(); conn.close()
+            logger.info("[mysql] Tables ready.")
         except Exception as e:
             raise RuntimeError(f"[mysql] Could not create tables: {e}")
 
+    # ── Settings ───────────────────────────────────────────────────────────
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT `value` FROM settings WHERE `key`=%s", (key,))
+        row = cur.fetchone()
+        cur.close(); conn.close()
+        return row[0] if row else default
+
+    def set_setting(self, key: str, value: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("REPLACE INTO settings (`key`, `value`) VALUES (%s, %s)", (key, value))
+        conn.commit()
+        cur.close(); conn.close()
+
     # ── Users ──────────────────────────────────────────────────────────────
+
+    def _row(self, row) -> Dict[str, Any]:
+        return {**row, "is_admin": bool(row["is_admin"]), "approved": bool(row["approved"])}
 
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, username, password_hash, is_admin FROM users WHERE id=%s",
-                    (user_id,))
+        cur.execute("SELECT id, username, password_hash, is_admin, approved "
+                    "FROM users WHERE id=%s AND approved=1", (user_id,))
         row = cur.fetchone()
         cur.close(); conn.close()
-        if row:
-            row["is_admin"] = bool(row["is_admin"])
-        return row
+        return self._row(row) if row else None
 
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, username, password_hash, is_admin FROM users WHERE username=%s",
-                    (username,))
+        cur.execute("SELECT id, username, password_hash, is_admin, approved "
+                    "FROM users WHERE username=%s AND approved=1", (username,))
         row = cur.fetchone()
         cur.close(); conn.close()
-        if row:
-            row["is_admin"] = bool(row["is_admin"])
-        return row
+        return self._row(row) if row else None
 
-    def create_user(self, username: str, password_hash: str, is_admin: bool = False) -> str:
+    def create_user(self, username: str, password_hash: str,
+                    is_admin: bool = False, approved: bool = True) -> str:
         conn = self._conn()
         cur = conn.cursor()
         user_id = str(uuid.uuid4())
-        cur.execute("INSERT INTO users (id, username, password_hash, is_admin) VALUES (%s,%s,%s,%s)",
-                    (user_id, username, password_hash, int(is_admin)))
+        cur.execute("INSERT INTO users (id, username, password_hash, is_admin, approved) "
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (user_id, username, password_hash, int(is_admin), int(approved)))
         conn.commit()
         cur.close(); conn.close()
         return user_id
@@ -106,11 +132,10 @@ class MysqlPlugin(StoragePlugin):
     def get_all_users(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, username, is_admin FROM users ORDER BY username")
-        rows = cur.fetchall()
+        cur.execute("SELECT id, username, is_admin, approved FROM users "
+                    "WHERE approved=1 ORDER BY username")
+        rows = [self._row(r) for r in cur.fetchall()]
         cur.close(); conn.close()
-        for r in rows:
-            r["is_admin"] = bool(r["is_admin"])
         return rows
 
     def delete_user(self, user_id: str):
@@ -120,13 +145,36 @@ class MysqlPlugin(StoragePlugin):
         conn.commit()
         cur.close(); conn.close()
 
+    def get_pending_users(self) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, username, is_admin, approved FROM users "
+                    "WHERE approved=0 ORDER BY username")
+        rows = [self._row(r) for r in cur.fetchall()]
+        cur.close(); conn.close()
+        return rows
+
+    def approve_user(self, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET approved=1 WHERE id=%s", (user_id,))
+        conn.commit()
+        cur.close(); conn.close()
+
+    def reject_user(self, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM users WHERE id=%s AND approved=0", (user_id,))
+        conn.commit()
+        cur.close(); conn.close()
+
     # ── Links ──────────────────────────────────────────────────────────────
 
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id, user_id, title, url, rank FROM links "
-                    "WHERE user_id=%s ORDER BY rank ASC", (user_id,))
+                    "WHERE user_id=%s ORDER BY rank", (user_id,))
         rows = cur.fetchall()
         cur.close(); conn.close()
         return rows
