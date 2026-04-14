@@ -191,7 +191,7 @@
           <td>{{ user.username }}</td>
           <td>{% if user.is_admin %}<span class="tag tag-admin">ADMIN</span>{% else %}user{% endif %}</td>
           <td>
-            {% if not user.is_admin %}
+            {% if user.id != current_user.id %}
             <form method="POST" action="/admin/delete_user/{{ user.id }}"
                   onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
               <button type="submit" class="btn btn-danger btn-sm">Delete</button>

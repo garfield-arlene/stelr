@@ -274,7 +274,7 @@ def admin_delete_user(user_id):
         flash("Admin access required.", "error")
         return redirect(url_for("index"))
     if user_id == current_user.id:
-        flash("You cannot delete your own admin account.", "error")
+        flash("You cannot delete your own account.", "error")
         return redirect(url_for("admin"))
     get_storage().delete_user(user_id)
     flash("User and their links deleted.", "info")
