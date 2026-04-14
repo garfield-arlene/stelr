@@ -14,7 +14,7 @@ x-app-base: &app-base
   image: stelr:2.0.0
   restart: unless-stopped
   ports:
-    - "5000:5000"
+    - "8082:5000"
 
 services:
 
