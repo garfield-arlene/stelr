@@ -56,14 +56,9 @@ Fill in the **Title**, **URL**, and **Rank** fields at the top of the page and
 click **Add**. Rank is a number — lower numbers appear first. You can use any
 numbering scheme you like (1, 2, 3 or 10, 20, 30, etc.).
 
-Dashboard
-![Stelr Dashboard](screenshots/Stelr_Interface_Dashboard_2026-04-13.png)
-
 ### Editing a link
 Click the **Edit** button on any row to expand an inline edit form. Change the
 fields you want and click **Save**.
-
-![Editing a link](screenshots/Stelr_Edit_2026-04-13.png)
 
 ### Deleting a link
 Click the **Delete** button on any row. You will be asked to confirm before the
@@ -96,9 +91,10 @@ way are active immediately.
 Lists all approved accounts. Non-admin users can be deleted, which also removes
 all of their saved links. Admin accounts cannot be deleted.
 
-### All Links
-A read-only view of every link saved by every user, showing the owning username,
-title, URL, and rank.
+### User Links
+Click any row in the Active Users table to expand a links panel below showing
+that user's bookmarks. Click the same row again, or the **✕ Clear** button, to
+hide the panel. Only one user's links are shown at a time.
 
 ---
 
