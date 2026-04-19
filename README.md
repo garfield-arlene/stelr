@@ -51,6 +51,9 @@ Click the **Logout** button in the top-right corner of any page.
 
 ## Using the App
 
+Dashboard
+![Stelr Dashboard](screenshots/Stelr_Interface_Dashboard_2026-04-13.png)
+
 ### Adding a link
 Fill in the **Title**, **URL**, and **Rank** fields at the top of the page and
 click **Add**. Rank is a number — lower numbers appear first. You can use any
@@ -224,7 +227,7 @@ To run in the background, add `-d`:
 podman compose --profile yaml up -d
 ```
 
-To stop without removing data:
+To stop without remo1ving data:
 
 ```bash
 podman compose --profile yaml stop
