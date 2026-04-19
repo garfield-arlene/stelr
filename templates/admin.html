@@ -229,19 +229,8 @@
 </div>
 
 <script>
-  // Build a map of user_id -> [{rank, title, url}, ...]
-  const linksByUser = {};
-  {% for link in links %}
-  (function() {
-    const uid = {{ link.user_id | tojson }};
-    if (!linksByUser[uid]) linksByUser[uid] = [];
-    linksByUser[uid].push({
-      rank:  {{ link.rank | tojson }},
-      title: {{ link.title | tojson }},
-      url:   {{ link.url | tojson }},
-    });
-  })();
-  {% endfor %}
+  // Build link map entirely in Jinja, pass as a single JSON object
+  const linksByUser = {{ links_by_user | tojson }};
 
   let selectedRow = null;
 

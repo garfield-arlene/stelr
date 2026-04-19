@@ -212,10 +212,23 @@ def admin():
         flash("Admin access required.", "error")
         return redirect(url_for("index"))
     storage = get_storage()
+    all_links = storage.get_all_links_admin()
+    # Build {user_id: [links]} map for the admin panel JS
+    links_by_user = {}
+    for link in all_links:
+        uid = link.get("user_id", "")
+        if uid not in links_by_user:
+            links_by_user[uid] = []
+        links_by_user[uid].append({
+            "rank":  link.get("rank", 0),
+            "title": link.get("title", ""),
+            "url":   link.get("url", ""),
+        })
     return render_template("admin.html",
                            users=storage.get_all_users(),
                            pending=storage.get_pending_users(),
-                           links=storage.get_all_links_admin(),
+                           links=all_links,
+                           links_by_user=links_by_user,
                            backend=STORAGE_BACKEND,
                            version=APP_VERSION,
                            app_name=APP_NAME,
