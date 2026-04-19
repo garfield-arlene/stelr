@@ -2,22 +2,44 @@ import os
 import sys
 import importlib
 import logging
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+import bcrypt
+from datetime import timedelta
+from flask import (Flask, render_template, request, redirect,
+                   url_for, jsonify, flash, session)
+from flask_login import (LoginManager, UserMixin, login_user,
+                         logout_user, login_required, current_user)
 
-# Ensure the app directory is always on the Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-2025")
-APP_VERSION = "1.0.0"
+app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
+APP_VERSION = "2.0.0"
 APP_NAME = "Stelr"
 
+SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=SESSION_TIMEOUT_MINUTES)
+
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "xml").lower()
+ADMIN_USERNAME  = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD  = os.environ.get("ADMIN_PASSWORD", "admin")
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Your session has expired. Please log in again."
+login_manager.login_message_category = "info"
+
+
+@app.before_request
+def enforce_session_timeout():
+    session.permanent = True
+
 
 _storage = None
+
 
 def get_storage():
     global _storage
@@ -30,28 +52,116 @@ def get_storage():
             "postgresql": ("plugins.postgresql_plugin", "PostgresqlPlugin"),
         }
         if STORAGE_BACKEND not in plugin_map:
-            raise ValueError(f"Unknown storage backend: '{STORAGE_BACKEND}'. "
-                             f"Valid options: {', '.join(plugin_map)}")
-        module_path, class_name = plugin_map[STORAGE_BACKEND]
-        logger.info(f"Loading storage backend: {STORAGE_BACKEND} ({module_path}.{class_name})")
+            raise ValueError(f"Unknown backend '{STORAGE_BACKEND}'.")
+        mod_path, cls_name = plugin_map[STORAGE_BACKEND]
+        logger.info(f"Loading backend: {STORAGE_BACKEND}")
         try:
-            module = importlib.import_module(module_path)
-            cls = getattr(module, class_name)
-            _storage = cls()
-            logger.info(f"Storage backend '{STORAGE_BACKEND}' initialised successfully.")
+            module = importlib.import_module(mod_path)
+            _storage = getattr(module, cls_name)()
+            _ensure_admin(_storage)
+            logger.info(f"Backend '{STORAGE_BACKEND}' ready.")
         except Exception as e:
-            logger.error(f"Failed to initialise storage backend '{STORAGE_BACKEND}': {e}")
+            logger.error(f"Backend init failed: {e}")
             raise
     return _storage
 
+
+def _ensure_admin(storage):
+    existing = storage.get_user_by_username(ADMIN_USERNAME)
+    if not existing:
+        pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
+        storage.create_user(ADMIN_USERNAME, pw_hash, is_admin=True, approved=True)
+        logger.info(f"Admin account '{ADMIN_USERNAME}' created.")
+
+
+def registration_enabled():
+    return get_storage().get_setting("registration_enabled", "true") == "true"
+
+
+# ── Flask-Login user class ─────────────────────────────────────────────────
+
+class User(UserMixin):
+    def __init__(self, data: dict):
+        self.id       = data["id"]
+        self.username = data["username"]
+        self.is_admin = data.get("is_admin", False)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    data = get_storage().get_user_by_id(user_id)
+    return User(data) if data else None
+
+
+# ── Auth routes ────────────────────────────────────────────────────────────
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        user_data = get_storage().get_user_by_username(username)
+        if user_data and bcrypt.checkpw(password.encode(),
+                                         user_data["password_hash"].encode()):
+            login_user(User(user_data))
+            return redirect(request.args.get("next") or url_for("index"))
+        flash("Invalid username or password.", "error")
+    return render_template("login.html", app_name=APP_NAME, version=APP_VERSION,
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           reg_enabled=registration_enabled())
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("You have been logged out.", "info")
+    return redirect(url_for("login"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    if not registration_enabled():
+        flash("Registration is currently disabled. Please contact an administrator.", "info")
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
+        confirm  = request.form.get("confirm", "")
+        if not username or not password:
+            flash("Username and password are required.", "error")
+        elif password != confirm:
+            flash("Passwords do not match.", "error")
+        elif len(password) < 6:
+            flash("Password must be at least 6 characters.", "error")
+        elif get_storage().get_user_by_username(username):
+            flash("That username is already taken.", "error")
+        else:
+            pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+            get_storage().create_user(username, pw_hash, is_admin=False, approved=False)
+            flash("Registration submitted! Your account is pending admin approval.", "success")
+            return redirect(url_for("login"))
+    return render_template("register.html", app_name=APP_NAME, version=APP_VERSION)
+
+
+# ── Main app routes ────────────────────────────────────────────────────────
+
 @app.route("/")
+@login_required
 def index():
-    links = get_storage().get_all()
+    links = get_storage().get_all(current_user.id)
     links.sort(key=lambda x: x.get("rank", 0))
     return render_template("index.html", links=links, backend=STORAGE_BACKEND,
-                           version=APP_VERSION, app_name=APP_NAME)
+                           version=APP_VERSION, app_name=APP_NAME,
+                           timeout=SESSION_TIMEOUT_MINUTES)
+
 
 @app.route("/add", methods=["POST"])
+@login_required
 def add():
     title = request.form.get("title", "").strip()
     url   = request.form.get("url", "").strip()
@@ -63,17 +173,22 @@ def add():
         rank = int(rank)
     except ValueError:
         rank = 0
-    get_storage().add({"title": title, "url": url, "rank": rank})
+    get_storage().add({"user_id": current_user.id, "title": title,
+                        "url": url, "rank": rank})
     flash(f"'{title}' added!", "success")
     return redirect(url_for("index"))
 
+
 @app.route("/delete/<link_id>", methods=["POST"])
+@login_required
 def delete(link_id):
-    get_storage().delete(link_id)
+    get_storage().delete(link_id, current_user.id)
     flash("Link deleted.", "info")
     return redirect(url_for("index"))
 
+
 @app.route("/update/<link_id>", methods=["POST"])
+@login_required
 def update(link_id):
     title = request.form.get("title", "").strip()
     url   = request.form.get("url", "").strip()
@@ -82,19 +197,129 @@ def update(link_id):
         rank = int(rank)
     except ValueError:
         rank = 0
-    get_storage().update(link_id, {"title": title, "url": url, "rank": rank})
+    get_storage().update(link_id, {"title": title, "url": url, "rank": rank},
+                          current_user.id)
     flash("Link updated.", "success")
     return redirect(url_for("index"))
 
-@app.route("/api/links", methods=["GET"])
+
+# ── Admin routes ───────────────────────────────────────────────────────────
+
+@app.route("/admin")
+@login_required
+def admin():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    storage = get_storage()
+    all_links = storage.get_all_links_admin()
+    # Build {user_id: [links]} map for the admin panel JS
+    links_by_user = {}
+    for link in all_links:
+        uid = link.get("user_id", "")
+        if uid not in links_by_user:
+            links_by_user[uid] = []
+        links_by_user[uid].append({
+            "rank":  link.get("rank", 0),
+            "title": link.get("title", ""),
+            "url":   link.get("url", ""),
+        })
+    return render_template("admin.html",
+                           users=storage.get_all_users(),
+                           pending=storage.get_pending_users(),
+                           links=all_links,
+                           links_by_user=links_by_user,
+                           backend=STORAGE_BACKEND,
+                           version=APP_VERSION,
+                           app_name=APP_NAME,
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           reg_enabled=registration_enabled())
+
+
+@app.route("/admin/create_user", methods=["POST"])
+@login_required
+def admin_create_user():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+    is_admin = request.form.get("is_admin") == "1"
+    if not username or not password:
+        flash("Username and password are required.", "error")
+    elif len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+    elif get_storage().get_user_by_username(username):
+        flash(f"Username '{username}' is already taken.", "error")
+    else:
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        get_storage().create_user(username, pw_hash, is_admin=is_admin, approved=True)
+        flash(f"User '{username}' created successfully.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/approve_user/<user_id>", methods=["POST"])
+@login_required
+def admin_approve_user(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    get_storage().approve_user(user_id)
+    flash("User approved.", "success")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/reject_user/<user_id>", methods=["POST"])
+@login_required
+def admin_reject_user(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    get_storage().reject_user(user_id)
+    flash("Registration rejected and removed.", "info")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/delete_user/<user_id>", methods=["POST"])
+@login_required
+def admin_delete_user(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    if user_id == current_user.id:
+        flash("You cannot delete your own account.", "error")
+        return redirect(url_for("admin"))
+    get_storage().delete_user(user_id)
+    flash("User and their links deleted.", "info")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/toggle_registration", methods=["POST"])
+@login_required
+def admin_toggle_registration():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    current = registration_enabled()
+    get_storage().set_setting("registration_enabled", "false" if current else "true")
+    flash(f"Registration {'disabled' if current else 'enabled'}.", "success")
+    return redirect(url_for("admin"))
+
+
+# ── API & health ───────────────────────────────────────────────────────────
+
+@app.route("/api/links")
+@login_required
 def api_links():
-    links = get_storage().get_all()
+    links = get_storage().get_all(current_user.id)
     links.sort(key=lambda x: x.get("rank", 0))
     return jsonify(links)
+
 
 @app.route("/health")
 def health():
     return jsonify({"status": "ok", "version": APP_VERSION, "backend": STORAGE_BACKEND})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000,

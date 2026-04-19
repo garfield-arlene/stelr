@@ -1,20 +1,29 @@
 version: "3.9"
 
 # ─────────────────────────────────────────────
-# Stelr v1.0.0 — docker compose
+# Stelr v2.0.0 — docker compose
 # Usage:
 #   XML (default):    docker compose up
 #   YAML:             docker compose --profile yaml up
 #   HTML:             docker compose --profile html up
 #   MySQL:            docker compose --profile mysql up
 #   PostgreSQL:       docker compose --profile postgresql up
+#
+# Override admin credentials:
+#   ADMIN_USERNAME=myuser ADMIN_PASSWORD=mypass docker compose up
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  image: stelr:1.0.0
+  image: stelr:2.0.0
   restart: unless-stopped
   ports:
-    - "5000:5000"
+    - "8082:5000"
+
+x-app-env: &app-env
+  ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+  SECRET_KEY: ${SECRET_KEY:-stelr-secret-change-me}
+  SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
 
 services:
 
@@ -22,6 +31,7 @@ services:
     <<: *app-base
     container_name: stelr
     environment:
+      <<: *app-env
       STORAGE_BACKEND: xml
       XML_FILE: /data/links.xml
     volumes:
@@ -32,6 +42,7 @@ services:
     <<: *app-base
     container_name: stelr
     environment:
+      <<: *app-env
       STORAGE_BACKEND: yaml
       YAML_FILE: /data/links.yaml
     volumes:
@@ -42,6 +53,7 @@ services:
     <<: *app-base
     container_name: stelr
     environment:
+      <<: *app-env
       STORAGE_BACKEND: html
       HTML_FILE: /data/links.html
     volumes:
@@ -52,6 +64,7 @@ services:
     <<: *app-base
     container_name: stelr
     environment:
+      <<: *app-env
       STORAGE_BACKEND: mysql
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
@@ -85,6 +98,7 @@ services:
     <<: *app-base
     container_name: stelr
     environment:
+      <<: *app-env
       STORAGE_BACKEND: postgresql
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"

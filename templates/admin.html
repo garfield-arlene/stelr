@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stelr — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0f12; --surface: #161a1f; --border: #2a2f38;
+      --accent: #00e5a0; --accent2: #0099ff; --danger: #ff3d5a;
+      --warn: #ffb800;
+      --text: #d4dbe8; --muted: #5a6478;
+      --mono: 'Share Tech Mono', monospace; --sans: 'Barlow', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+    header { border-bottom: 1px solid var(--border); padding: 1.2rem 2rem;
+             display: flex; align-items: center; gap: 1rem;
+             position: sticky; top: 0; background: rgba(13,15,18,0.95);
+             backdrop-filter: blur(8px); z-index: 100; }
+    .logo { font-family: var(--mono); font-size: 1.3rem; color: var(--accent); letter-spacing: 4px; }
+    .badge { font-family: var(--mono); font-size: 0.68rem; padding: 2px 8px;
+             border: 1px solid; border-radius: 2px; letter-spacing: 1px; }
+    .badge-admin   { border-color: var(--danger); color: var(--danger); }
+    .badge-backend { border-color: var(--border); color: var(--muted); }
+    .badge-warn    { border-color: var(--warn); color: var(--warn); }
+    .header-right { margin-left: auto; display: flex; gap: 0.8rem; align-items: center; }
+    .btn { display: inline-flex; align-items: center; padding: 0.5rem 1rem;
+           font-family: var(--mono); font-size: 0.75rem; border: none; cursor: pointer;
+           text-transform: uppercase; letter-spacing: 1px; text-decoration: none;
+           transition: opacity 0.15s; }
+    .btn-primary   { background: var(--accent); color: #000; }
+    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+    .btn-danger    { background: var(--danger); color: #fff; }
+    .btn-warn      { background: transparent; border: 1px solid var(--warn); color: var(--warn); }
+    .btn-warn:hover { background: var(--warn); color: #000; }
+    .btn-success   { background: var(--accent); color: #000; }
+    .btn-sm { padding: 0.3rem 0.65rem; font-size: 0.68rem; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+    .section { margin-bottom: 2.5rem; }
+    .section-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    h2 { font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
+         text-transform: uppercase; letter-spacing: 2px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem;
+             margin-bottom: 2rem; }
+    .panel h2 { margin-bottom: 1.2rem; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 0.75rem; align-items: end; }
+    label { display: block; font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+            text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.3rem; }
+    input[type="text"], input[type="password"] {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--mono); font-size: 0.85rem;
+      padding: 0.6rem 0.8rem; outline: none; transition: border-color 0.15s; }
+    input:focus { border-color: var(--accent); }
+    .checkbox-row { display: flex; align-items: center; gap: 0.5rem;
+                    font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { border-bottom: 2px solid var(--border); }
+    th { font-family: var(--mono); font-size: 0.68rem; color: var(--muted);
+         text-transform: uppercase; letter-spacing: 1.5px; padding: 0.6rem 1rem; text-align: left; }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:hover { background: rgba(255,255,255,0.02); }
+    td { padding: 0.75rem 1rem; font-size: 0.88rem; vertical-align: middle; }
+    .tag { font-family: var(--mono); font-size: 0.65rem; padding: 1px 7px;
+           border: 1px solid; display: inline-block; }
+    .tag-admin   { border-color: var(--danger); color: var(--danger); }
+    .tag-pending { border-color: var(--warn); color: var(--warn); }
+    .actions { display: flex; gap: 0.4rem; }
+    .selected-row { background: rgba(0,229,160,0.06) !important; outline: 1px solid rgba(0,229,160,0.3); }
+    tbody tr.clickable { cursor: pointer; }
+    tbody tr.clickable:hover { background: rgba(0,229,160,0.04); }
+    .link-url a { color: var(--accent2); font-family: var(--mono); font-size: 0.72rem;
+                  text-decoration: none; word-break: break-all; }
+    .flash-list { list-style: none; margin-bottom: 1.5rem; }
+    .flash-list li { padding: 0.6rem 1rem; border-left: 3px solid;
+                     font-size: 0.8rem; font-family: var(--mono); margin-bottom: 0.3rem; }
+    .flash-list li.error   { border-color: var(--danger); color: var(--danger); }
+    .flash-list li.success { border-color: var(--accent); color: var(--accent); }
+    .flash-list li.info    { border-color: var(--accent2); color: var(--accent2); }
+    .empty { color: var(--muted); font-family: var(--mono); font-size: 0.8rem; padding: 1rem 0; }
+    .reg-status { font-family: var(--mono); font-size: 0.78rem; }
+    .reg-on  { color: var(--accent); }
+    .reg-off { color: var(--danger); }
+    @media (max-width: 700px) { .form-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo">STELR</div>
+  <span class="badge badge-admin">ADMIN</span>
+  <span class="badge badge-backend">{{ backend }}</span>
+  {% if pending %}
+  <span class="badge badge-warn">{{ pending|length }} PENDING</span>
+  {% endif %}
+  <div class="header-right">
+    <a href="/" class="btn btn-secondary">← My Links</a>
+    <a href="/logout" class="btn btn-secondary">Logout</a>
+  </div>
+</header>
+
+<div class="container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flash-list">
+        {% for cat, msg in messages %}<li class="{{ cat }}">{{ msg }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <!-- ── Registration toggle ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>// Registration</h2>
+      <span class="reg-status">
+        Status: {% if reg_enabled %}<span class="reg-on">ENABLED</span>{% else %}<span class="reg-off">DISABLED</span>{% endif %}
+      </span>
+      <form method="POST" action="/admin/toggle_registration">
+        <button type="submit" class="btn {% if reg_enabled %}btn-warn{% else %}btn-success{% endif %} btn-sm">
+          {% if reg_enabled %}Disable Registration{% else %}Enable Registration{% endif %}
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ── Pending approvals ── -->
+  {% if pending %}
+  <div class="section">
+    <h2>// Pending Approval ({{ pending|length }})</h2>
+    <br>
+    <table>
+      <thead><tr><th>Username</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for user in pending %}
+        <tr>
+          <td>{{ user.username }} <span class="tag tag-pending">PENDING</span></td>
+          <td>
+            <div class="actions">
+              <form method="POST" action="/admin/approve_user/{{ user.id }}">
+                <button type="submit" class="btn btn-success btn-sm">Approve</button>
+              </form>
+              <form method="POST" action="/admin/reject_user/{{ user.id }}"
+                    onsubmit="return confirm('Reject and delete this registration?')">
+                <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ── Create user ── -->
+  <div class="panel">
+    <h2>// Create User</h2>
+    <form method="POST" action="/admin/create_user">
+      <div class="form-row">
+        <div>
+          <label>Username</label>
+          <input type="text" name="username" required>
+        </div>
+        <div>
+          <label>Password</label>
+          <input type="password" name="password" required>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <div class="checkbox-row">
+            <input type="checkbox" name="is_admin" value="1" id="is_admin">
+            <label for="is_admin" style="margin:0">Admin</label>
+          </div>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- ── Active users ── -->
+  <div class="section">
+    <h2>// Active Users ({{ users|length }})</h2>
+    <br>
+    {% if users %}
+    <table>
+      <thead><tr><th>Username</th><th>Role</th><th>Action</th><th></th></tr></thead>
+      <tbody>
+        {% for user in users %}
+        <tr class="clickable" data-uid="{{ user.id }}" data-uname="{{ user.username }}">
+          <td>{{ user.username }}</td>
+          <td>{% if user.is_admin %}<span class="tag tag-admin">ADMIN</span>{% else %}user{% endif %}</td>
+          <td onclick="event.stopPropagation()">
+            {% if user.id != current_user.id %}
+            <form method="POST" action="/admin/delete_user/{{ user.id }}"
+                  onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+            {% endif %}
+          </td>
+          <td style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">click to view links ›</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No active users.</div>
+    {% endif %}
+  </div>
+
+
+  <!-- ── User links (shown on user selection) ── -->
+  <div class="section" id="user-links-section" style="display:none">
+    <div class="section-header">
+      <h2>// Links for <span id="selected-username"></span></h2>
+      <button class="btn btn-secondary btn-sm" onclick="clearSelection()">✕ Clear</button>
+    </div>
+    <br>
+    <table>
+      <thead><tr><th>Rank</th><th>Title</th><th>URL</th></tr></thead>
+      <tbody id="user-links-body"></tbody>
+    </table>
+    <div class="empty" id="user-links-empty" style="display:none">This user has no links.</div>
+  </div>
+
+</div>
+
+<script>
+  // Build link map entirely in Jinja, pass as a single JSON object
+  const linksByUser = {{ links_by_user | tojson }};
+
+  let selectedRow = null;
+
+  // Use event delegation — Firefox does not reliably fire onclick on <tr>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('tr.clickable').forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        // Don't trigger if the click was on a button or form inside the row
+        if (e.target.closest('form, button, a')) return;
+        var uid   = row.getAttribute('data-uid');
+        var uname = row.getAttribute('data-uname');
+        selectUser(row, uid, uname);
+      });
+    });
+  });
+
+  function selectUser(row, userId, username) {
+    // Deselect if clicking the same row
+    if (selectedRow === row) {
+      clearSelection();
+      return;
+    }
+    // Highlight row
+    if (selectedRow) selectedRow.classList.remove('selected-row');
+    selectedRow = row;
+    row.classList.add('selected-row');
+
+    // Populate links table
+    const tbody = document.getElementById('user-links-body');
+    const empty = document.getElementById('user-links-empty');
+    tbody.innerHTML = '';
+    const userLinks = linksByUser[userId] || [];
+    if (userLinks.length === 0) {
+      empty.style.display = '';
+    } else {
+      empty.style.display = 'none';
+      userLinks.forEach(function(l) {
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td><span style="font-family:var(--mono);color:var(--accent)">' + l.rank + '</span></td>' +
+          '<td>' + escHtml(l.title) + '</td>' +
+          '<td class="link-url"><a href="' + escHtml(l.url) + '" target="_blank" rel="noopener">' + escHtml(l.url) + '</a></td>';
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('selected-username').textContent = username;
+    document.getElementById('user-links-section').style.display = '';
+  }
+
+  function clearSelection() {
+    if (selectedRow) selectedRow.classList.remove('selected-row');
+    selectedRow = null;
+    document.getElementById('user-links-section').style.display = 'none';
+    document.getElementById('user-links-body').innerHTML = '';
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
+
