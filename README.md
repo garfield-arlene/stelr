@@ -231,7 +231,7 @@ To run in the background, add `-d`:
 podman compose --profile yaml up -d
 ```
 
-To stop without removing data:
+To stop without remo1ving data:
 
 ```bash
 podman compose --profile yaml stop
