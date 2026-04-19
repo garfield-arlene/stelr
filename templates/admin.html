@@ -190,7 +190,7 @@
       <thead><tr><th>Username</th><th>Role</th><th>Action</th><th></th></tr></thead>
       <tbody>
         {% for user in users %}
-        <tr class="clickable" onclick="selectUser(this, {{ user.id | tojson }}, {{ user.username | tojson }})">
+        <tr class="clickable" data-uid="{{ user.id }}" data-uname="{{ user.username }}">
           <td>{{ user.username }}</td>
           <td>{% if user.is_admin %}<span class="tag tag-admin">ADMIN</span>{% else %}user{% endif %}</td>
           <td onclick="event.stopPropagation()">
@@ -233,6 +233,19 @@
   const linksByUser = {{ links_by_user | tojson }};
 
   let selectedRow = null;
+
+  // Use event delegation — Firefox does not reliably fire onclick on <tr>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('tr.clickable').forEach(function(row) {
+      row.addEventListener('click', function(e) {
+        // Don't trigger if the click was on a button or form inside the row
+        if (e.target.closest('form, button, a')) return;
+        var uid   = row.getAttribute('data-uid');
+        var uname = row.getAttribute('data-uname');
+        selectUser(row, uid, uname);
+      });
+    });
+  });
 
   function selectUser(row, userId, username) {
     // Deselect if clicking the same row
