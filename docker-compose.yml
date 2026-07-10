@@ -98,11 +98,11 @@ services:
 
   app-postgresql:
     <<: *app-base
-    container_name: stelr-postgres
+    container_name: stelr-web-postgres
     environment:
       <<: *app-env
       STORAGE_BACKEND: postgresql
-      POSTGRES_HOST: stelr-postgres
+      POSTGRES_HOST: stelr-db-postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: stelr
       POSTGRES_USER: stelr
@@ -116,7 +116,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: stelr-postgres
+    container_name: stelr-db-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: stelr
