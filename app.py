@@ -294,6 +294,22 @@ def admin_delete_user(user_id):
     return redirect(url_for("admin"))
 
 
+@app.route("/admin/reset_password/<user_id>", methods=["POST"])
+@login_required
+def admin_reset_password(user_id):
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    password = request.form.get("password", "")
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+        return redirect(url_for("admin"))
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    get_storage().set_password(user_id, pw_hash)
+    flash("Password reset.", "success")
+    return redirect(url_for("admin"))
+
+
 @app.route("/admin/toggle_registration", methods=["POST"])
 @login_required
 def admin_toggle_registration():

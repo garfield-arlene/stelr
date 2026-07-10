@@ -144,6 +144,13 @@ class PostgresqlPlugin(StoragePlugin):
         conn.commit()
         cur.close(); conn.close()
 
+    def set_password(self, user_id: str, password_hash: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (password_hash, user_id))
+        conn.commit()
+        cur.close(); conn.close()
+
     def get_pending_users(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

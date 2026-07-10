@@ -97,6 +97,14 @@ class YamlPlugin(StoragePlugin):
         data["links"] = [l for l in data["links"] if l.get("user_id") != user_id]
         self._write(data)
 
+    def set_password(self, user_id: str, password_hash: str):
+        data = self._load()
+        for u in data["users"]:
+            if u.get("id") == user_id:
+                u["password_hash"] = password_hash
+                break
+        self._write(data)
+
     # ── Pending registrations ──────────────────────────────────────────────
 
     def get_pending_users(self) -> List[Dict[str, Any]]:

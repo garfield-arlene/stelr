@@ -194,12 +194,16 @@
           <td>{{ user.username }}</td>
           <td>{% if user.is_admin %}<span class="tag tag-admin">ADMIN</span>{% else %}user{% endif %}</td>
           <td onclick="event.stopPropagation()">
-            {% if user.id != current_user.id %}
-            <form method="POST" action="/admin/delete_user/{{ user.id }}"
-                  onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
-              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
-            {% endif %}
+            <div class="actions">
+              <button type="button" class="btn btn-warn btn-sm"
+                      onclick="resetPassword('{{ user.id }}', '{{ user.username }}')">Reset PW</button>
+              {% if user.id != current_user.id %}
+              <form method="POST" action="/admin/delete_user/{{ user.id }}"
+                    onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+              </form>
+              {% endif %}
+            </div>
           </td>
           <td style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">click to view links ›</td>
         </tr>
@@ -279,6 +283,25 @@
 
     document.getElementById('selected-username').textContent = username;
     document.getElementById('user-links-section').style.display = '';
+  }
+
+  function resetPassword(userId, username) {
+    const pw = prompt('New password for ' + username + ' (min 6 characters):');
+    if (pw === null) return;
+    if (pw.length < 6) {
+      alert('Password must be at least 6 characters.');
+      return;
+    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/reset_password/' + userId;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'password';
+    input.value = pw;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function clearSelection() {
