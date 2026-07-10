@@ -14,7 +14,7 @@ version: "3.9"
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  image: stelr:2.5.0
+  image: stelr:2.5.1
   restart: unless-stopped
   ports:
     - "8082:5000"
