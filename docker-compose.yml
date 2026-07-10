@@ -98,7 +98,7 @@ services:
 
   app-postgresql:
     <<: *app-base
-    container_name: stelr
+    container_name: stelr-postgres
     environment:
       <<: *app-env
       STORAGE_BACKEND: postgresql
