@@ -113,6 +113,7 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: stelr-postgres
+    network_mode: "pod:pod_stelr
     restart: unless-stopped
     environment:
       POSTGRES_DB: stelr
