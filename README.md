@@ -20,6 +20,13 @@ and approval.
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
 
+## To Do
+
+- Admin can change user passwords
+- Filter entries by keyword ( substring ) in title or URL
+- Filter entries by rank numerical comparison - < <= == => >
+- Sort entries by clicking the column header
+
 ---
 
 ## Getting Started
