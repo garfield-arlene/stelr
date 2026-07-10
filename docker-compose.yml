@@ -100,7 +100,7 @@ services:
     environment:
       <<: *app-env
       STORAGE_BACKEND: postgresql
-      POSTGRES_HOST: localhost
+      POSTGRES_HOST: stelr-postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: stelr
       POSTGRES_USER: stelr
@@ -108,6 +108,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - stelr-net
     profiles: ["postgresql"]
 
   postgres:
@@ -126,9 +128,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - stelr-net
     profiles: ["postgresql"]
 
 volumes:
   stelrdata:
   mysql_data:
   pg_data:
+
+networks:
+  stelr-net:
+    driver: bridge
