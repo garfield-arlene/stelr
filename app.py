@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.5.2"
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -184,6 +184,27 @@ def add():
 def delete(link_id):
     get_storage().delete(link_id, current_user.id)
     flash("Link deleted.", "info")
+    return redirect(url_for("index"))
+
+
+@app.route("/change_password", methods=["POST"])
+@login_required
+def change_password():
+    current_password = request.form.get("current_password", "")
+    new_password     = request.form.get("new_password", "")
+    confirm          = request.form.get("confirm_password", "")
+    user_data = get_storage().get_user_by_id(current_user.id)
+    if not user_data or not bcrypt.checkpw(current_password.encode(),
+                                            user_data["password_hash"].encode()):
+        flash("Current password is incorrect.", "error")
+    elif len(new_password) < 6:
+        flash("New password must be at least 6 characters.", "error")
+    elif new_password != confirm:
+        flash("New passwords do not match.", "error")
+    else:
+        pw_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        get_storage().set_password(current_user.id, pw_hash)
+        flash("Password changed successfully.", "success")
     return redirect(url_for("index"))
 
 

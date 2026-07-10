@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v2.5.1**
+**v2.5.2**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -13,6 +13,7 @@ and approval.
 
 **New:**
 - Admin can change user passwords
+- User can change their own password
 
 - Save URLs with a title and rank
 - Edit or delete any saved link
