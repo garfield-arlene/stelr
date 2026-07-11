@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v2.5.2**
+**v2.5.3**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -13,6 +13,7 @@ and approval.
 
 - Admin can change user passwords
 - User can change their own password
+- Fixed MySQL backend failing to start (`rank` is a reserved keyword in MySQL 8.0+)
 
 ## Features
 

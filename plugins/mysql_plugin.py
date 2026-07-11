@@ -57,7 +57,7 @@ class MysqlPlugin(StoragePlugin):
                     user_id VARCHAR(36)  NOT NULL,
                     title   VARCHAR(512) NOT NULL,
                     url     TEXT         NOT NULL,
-                    rank    INT          DEFAULT 0,
+                    `rank`  INT          DEFAULT 0,
                     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
@@ -180,8 +180,8 @@ class MysqlPlugin(StoragePlugin):
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, user_id, title, url, rank FROM links "
-                    "WHERE user_id=%s ORDER BY rank", (user_id,))
+        cur.execute("SELECT id, user_id, title, url, `rank` FROM links "
+                    "WHERE user_id=%s ORDER BY `rank`", (user_id,))
         rows = cur.fetchall()
         cur.close(); conn.close()
         return rows
@@ -189,8 +189,8 @@ class MysqlPlugin(StoragePlugin):
     def get_all_links_admin(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT l.id, l.user_id, u.username, l.title, l.url, l.rank "
-                    "FROM links l JOIN users u ON l.user_id=u.id ORDER BY u.username, l.rank")
+        cur.execute("SELECT l.id, l.user_id, u.username, l.title, l.url, l.`rank` "
+                    "FROM links l JOIN users u ON l.user_id=u.id ORDER BY u.username, l.`rank`")
         rows = cur.fetchall()
         cur.close(); conn.close()
         return rows
@@ -199,7 +199,7 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         link_id = str(uuid.uuid4())
-        cur.execute("INSERT INTO links (id, user_id, title, url, rank) VALUES (%s,%s,%s,%s,%s)",
+        cur.execute("INSERT INTO links (id, user_id, title, url, `rank`) VALUES (%s,%s,%s,%s,%s)",
                     (link_id, link["user_id"], link["title"], link["url"], link.get("rank", 0)))
         conn.commit()
         cur.close(); conn.close()
@@ -215,7 +215,7 @@ class MysqlPlugin(StoragePlugin):
     def update(self, link_id: str, link: Dict[str, Any], user_id: str):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute("UPDATE links SET title=%s, url=%s, rank=%s WHERE id=%s AND user_id=%s",
+        cur.execute("UPDATE links SET title=%s, url=%s, `rank`=%s WHERE id=%s AND user_id=%s",
                     (link["title"], link["url"], link.get("rank", 0), link_id, user_id))
         conn.commit()
         cur.close(); conn.close()
