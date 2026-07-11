@@ -25,12 +25,13 @@ class XmlPlugin(StoragePlugin):
             ET.SubElement(root, "users")
             ET.SubElement(root, "links")
             ET.SubElement(root, "settings")
+            ET.SubElement(root, "groups")
             self._write(root)
         else:
             try:
                 root = ET.parse(DATA_FILE).getroot()
                 # Migrate older files
-                for tag in ("users", "links", "settings"):
+                for tag in ("users", "links", "settings", "groups"):
                     if root.find(tag) is None:
                         ET.SubElement(root, tag)
                 self._write(root)
@@ -160,11 +161,12 @@ class XmlPlugin(StoragePlugin):
 
     def _el_to_link(self, el: ET.Element) -> Dict[str, Any]:
         return {
-            "id":      el.get("id"),
-            "user_id": el.findtext("user_id", ""),
-            "title":   el.findtext("title", ""),
-            "url":     el.findtext("url", ""),
-            "rank":    int(el.findtext("rank", "0")),
+            "id":       el.get("id"),
+            "user_id":  el.findtext("user_id", ""),
+            "title":    el.findtext("title", ""),
+            "url":      el.findtext("url", ""),
+            "rank":     int(el.findtext("rank", "0")),
+            "group_id": el.findtext("group_id", ""),
         }
 
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
@@ -180,7 +182,7 @@ class XmlPlugin(StoragePlugin):
         root = self._load()
         link_id = str(uuid.uuid4())
         el = ET.SubElement(root.find("links"), "link", id=link_id)
-        for key in ("user_id", "title", "url", "rank"):
+        for key in ("user_id", "title", "url", "rank", "group_id"):
             ET.SubElement(el, key).text = str(link.get(key, ""))
         self._write(root)
         return link_id
@@ -198,10 +200,56 @@ class XmlPlugin(StoragePlugin):
         root = self._load()
         for el in root.find("links").findall("link"):
             if el.get("id") == link_id and el.findtext("user_id", "") == user_id:
-                for key in ("title", "url", "rank"):
+                for key in ("title", "url", "rank", "group_id"):
                     child = el.find(key)
                     if child is None:
                         child = ET.SubElement(el, key)
                     child.text = str(link.get(key, ""))
                 break
+        self._write(root)
+
+    # ── Groups ─────────────────────────────────────────────────────────────
+
+    def _el_to_group(self, el: ET.Element) -> Dict[str, Any]:
+        return {
+            "id":      el.get("id"),
+            "user_id": el.findtext("user_id", ""),
+            "name":    el.findtext("name", ""),
+        }
+
+    def get_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        root = self._load()
+        return [self._el_to_group(el) for el in root.find("groups").findall("group")
+                if el.findtext("user_id", "") == user_id]
+
+    def create_group(self, user_id: str, name: str) -> str:
+        root = self._load()
+        group_id = str(uuid.uuid4())
+        el = ET.SubElement(root.find("groups"), "group", id=group_id)
+        ET.SubElement(el, "user_id").text = user_id
+        ET.SubElement(el, "name").text = name
+        self._write(root)
+        return group_id
+
+    def rename_group(self, group_id: str, user_id: str, name: str):
+        root = self._load()
+        for el in root.find("groups").findall("group"):
+            if el.get("id") == group_id and el.findtext("user_id", "") == user_id:
+                el.find("name").text = name
+                break
+        self._write(root)
+
+    def delete_group(self, group_id: str, user_id: str):
+        root = self._load()
+        groups_el = root.find("groups")
+        found = False
+        for el in groups_el.findall("group"):
+            if el.get("id") == group_id and el.findtext("user_id", "") == user_id:
+                groups_el.remove(el)
+                found = True
+                break
+        if found:
+            for el in root.find("links").findall("link"):
+                if el.findtext("group_id", "") == group_id:
+                    el.find("group_id").text = ""
         self._write(root)

@@ -76,3 +76,21 @@ class StoragePlugin(ABC):
     @abstractmethod
     def set_setting(self, key: str, value: str) -> None:
         """Store a setting value."""
+
+    # ── Groups ─────────────────────────────────────────────────────────────
+
+    @abstractmethod
+    def get_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        """Return all groups belonging to a user."""
+
+    @abstractmethod
+    def create_group(self, user_id: str, name: str) -> str:
+        """Create a group for a user and return its generated id."""
+
+    @abstractmethod
+    def rename_group(self, group_id: str, user_id: str, name: str) -> None:
+        """Rename a group, scoped to user."""
+
+    @abstractmethod
+    def delete_group(self, group_id: str, user_id: str) -> None:
+        """Delete a group, scoped to user. Its links become ungrouped."""

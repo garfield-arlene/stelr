@@ -55,15 +55,30 @@
                  padding: 1.5rem; margin-bottom: 2rem; }
     .add-panel h2 { font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
                     text-transform: uppercase; letter-spacing: 2px; margin-bottom: 1.2rem; }
-    .form-row { display: grid; grid-template-columns: 2fr 3fr 80px auto;
+    .form-row { display: grid; grid-template-columns: 2fr 3fr 80px 1fr auto;
                 gap: 0.75rem; align-items: end; }
     label { display: block; font-size: 0.7rem; color: var(--muted); font-family: var(--mono);
             text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.35rem; }
-    input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
+    input[type="text"], input[type="url"], input[type="number"], input[type="password"], select {
       width: 100%; background: var(--bg); border: 1px solid var(--border);
       color: var(--text); font-family: var(--mono); font-size: 0.85rem;
       padding: 0.6rem 0.8rem; outline: none; transition: border-color 0.15s; }
-    input:focus { border-color: var(--accent); }
+    input:focus, select:focus { border-color: var(--accent); }
+    .filter-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto auto;
+                  gap: 0.75rem; align-items: end; }
+    .group-row { display: grid; grid-template-columns: 2fr auto;
+                 gap: 0.75rem; align-items: end; }
+    .group-list { list-style: none; margin-top: 1rem; }
+    .group-list li { display: flex; align-items: center; justify-content: space-between;
+                      padding: 0.5rem 0; border-bottom: 1px solid var(--border);
+                      font-family: var(--mono); font-size: 0.8rem; }
+    .group-list li:last-child { border-bottom: none; }
+    .group-badge { font-family: var(--mono); font-size: 0.7rem; color: var(--accent2);
+                    background: rgba(0,153,255,0.08); border: 1px solid rgba(0,153,255,0.25);
+                    padding: 2px 8px; display: inline-block; }
+    th a.sort-link { color: inherit; text-decoration: none; }
+    th a.sort-link:hover { color: var(--accent); }
+    @media (max-width: 700px) { .filter-row { grid-template-columns: 1fr; } }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
                       display: flex; align-items: center; justify-content: center; z-index: 200; }
     .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
@@ -93,7 +108,7 @@
     .edit-row td { padding: 0.6rem 1rem; background: rgba(0,229,160,0.03);
                    border-bottom: 1px solid var(--accent); }
     .edit-row.open { display: table-row; }
-    .edit-form-inner { display: grid; grid-template-columns: 2fr 3fr 80px auto;
+    .edit-form-inner { display: grid; grid-template-columns: 2fr 3fr 80px 1fr auto;
                        gap: 0.6rem; align-items: end; }
     .empty { text-align: center; padding: 4rem 2rem; color: var(--muted);
              font-family: var(--mono); font-size: 0.85rem; }
@@ -146,6 +161,15 @@
           <input type="number" name="rank" value="0" min="0">
         </div>
         <div>
+          <label>Group</label>
+          <select name="group_id">
+            <option value="">No Group</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}">{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
           <label>&nbsp;</label>
           <button type="submit" class="btn btn-primary">+ ADD</button>
         </div>
@@ -153,11 +177,101 @@
     </form>
   </div>
 
+  <div class="add-panel">
+    <h2>// Manage Groups</h2>
+    <form method="POST" action="/groups/create">
+      <div class="group-row">
+        <div>
+          <label>New Group Name</label>
+          <input type="text" name="name" placeholder="e.g. Work, Reading List..." required>
+        </div>
+        <div>
+          <button type="submit" class="btn btn-primary">+ Create Group</button>
+        </div>
+      </div>
+    </form>
+    {% if groups %}
+    <ul class="group-list">
+      {% for g in groups %}
+      <li>
+        <span class="group-badge">{{ g.name }}</span>
+        <div class="actions">
+          <button type="button" class="btn btn-secondary btn-sm"
+                  onclick="renameGroup('{{ g.id }}', '{{ g.name|e }}')">Rename</button>
+          <form method="POST" action="/groups/delete/{{ g.id }}"
+                onsubmit="return confirm('Delete group \'{{ g.name|e }}\'? Its links will become ungrouped.')">
+            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="add-panel">
+    <h2>// Filter Links</h2>
+    <form method="GET" action="/">
+      <input type="hidden" name="sort" value="{{ sort_field }}">
+      <input type="hidden" name="dir" value="{{ sort_dir }}">
+      <div class="filter-row">
+        <div>
+          <label>Keyword (title or URL)</label>
+          <input type="text" name="q" value="{{ filter_q }}" placeholder="Search...">
+        </div>
+        <div>
+          <label>Rank</label>
+          <select name="rank_op">
+            <option value=""   {% if filter_rank_op == "" %}selected{% endif %}>Any</option>
+            <option value="<"  {% if filter_rank_op == "<" %}selected{% endif %}>&lt;</option>
+            <option value="<=" {% if filter_rank_op == "<=" %}selected{% endif %}>&le;</option>
+            <option value="==" {% if filter_rank_op == "==" %}selected{% endif %}>=</option>
+            <option value=">=" {% if filter_rank_op == ">=" %}selected{% endif %}>&ge;</option>
+            <option value=">"  {% if filter_rank_op == ">" %}selected{% endif %}>&gt;</option>
+          </select>
+        </div>
+        <div>
+          <label>Value</label>
+          <input type="number" name="rank_val" value="{{ filter_rank_val }}">
+        </div>
+        <div>
+          <label>Group</label>
+          <select name="group">
+            <option value="" {% if filter_group == "" %}selected{% endif %}>All Groups</option>
+            <option value="__ungrouped__" {% if filter_group == "__ungrouped__" %}selected{% endif %}>Ungrouped</option>
+            {% for g in groups %}
+            <option value="{{ g.id }}" {% if filter_group == g.id %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button type="submit" class="btn btn-primary">Filter</button>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <a href="/" class="btn btn-secondary">Clear</a>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {% macro sort_header(field, label) -%}
+    {%- set next_dir = 'desc' if (sort_field == field and sort_dir == 'asc') else 'asc' -%}
+    <a class="sort-link" href="{{ url_for('index', q=filter_q, rank_op=filter_rank_op, rank_val=filter_rank_val, group=filter_group, sort=field, dir=next_dir) }}">{{ label }}{% if sort_field == field %}{{ ' ▲' if sort_dir == 'asc' else ' ▼' }}{% endif %}</a>
+  {%- endmacro %}
+
   {% if links %}
   <div class="table-wrap">
     <table>
       <thead>
-        <tr><th>Rank</th><th>Title</th><th>URL</th><th>Actions</th></tr>
+        <tr>
+          <th>{{ sort_header('rank', 'Rank') }}</th>
+          <th>{{ sort_header('title', 'Title') }}</th>
+          <th>{{ sort_header('url', 'URL') }}</th>
+          <th>Group</th>
+          <th>Actions</th>
+        </tr>
       </thead>
       <tbody>
         {% for link in links %}
@@ -165,6 +279,13 @@
           <td><span class="rank-badge">{{ link.rank }}</span></td>
           <td class="link-title">{{ link.title }}</td>
           <td class="link-url"><a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url }}</a></td>
+          <td>
+            {% if link.group_id and group_map.get(link.group_id) %}
+            <span class="group-badge">{{ group_map[link.group_id] }}</span>
+            {% else %}
+            <span style="color:var(--muted)">—</span>
+            {% endif %}
+          </td>
           <td>
             <div class="actions">
               <button class="btn btn-secondary btn-sm" onclick="toggleEdit('{{ link.id }}')">Edit</button>
@@ -176,12 +297,21 @@
           </td>
         </tr>
         <tr class="edit-row" id="edit-{{ link.id }}">
-          <td colspan="4">
+          <td colspan="5">
             <form method="POST" action="/update/{{ link.id }}">
               <div class="edit-form-inner">
                 <div><label>Title</label><input type="text" name="title" value="{{ link.title }}" required></div>
                 <div><label>URL</label><input type="url" name="url" value="{{ link.url }}" required></div>
                 <div><label>Rank</label><input type="number" name="rank" value="{{ link.rank }}" min="0"></div>
+                <div>
+                  <label>Group</label>
+                  <select name="group_id">
+                    <option value="" {% if not link.group_id %}selected{% endif %}>No Group</option>
+                    {% for g in groups %}
+                    <option value="{{ g.id }}" {% if link.group_id == g.id %}selected{% endif %}>{{ g.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
                 <div>
                   <label>&nbsp;</label>
                   <div style="display:flex;gap:0.4rem">
@@ -201,7 +331,11 @@
   {% else %}
   <div class="empty">
     <div class="big">◈</div>
+    {% if filter_q or filter_rank_op or filter_group %}
+    No links match your filter. <a href="/" style="color:var(--accent2)">Clear filter</a>
+    {% else %}
     No links yet. Add one above.
+    {% endif %}
   </div>
   {% endif %}
 </div>
@@ -229,6 +363,21 @@
 <script>
   function toggleEdit(id) {
     document.getElementById('edit-' + id).classList.toggle('open');
+  }
+
+  function renameGroup(groupId, currentName) {
+    const name = prompt('Rename group:', currentName);
+    if (name === null || !name.trim()) return;
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/groups/rename/' + groupId;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'name';
+    input.value = name.trim();
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
   }
 
   function openChangePasswordModal() {

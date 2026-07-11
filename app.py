@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "2.5.3"
+APP_VERSION = "3.5.1"
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -150,22 +150,95 @@ def register():
 
 # ── Main app routes ────────────────────────────────────────────────────────
 
+RANK_OPS = {
+    "<":  lambda rank, val: rank < val,
+    "<=": lambda rank, val: rank <= val,
+    "==": lambda rank, val: rank == val,
+    ">=": lambda rank, val: rank >= val,
+    ">":  lambda rank, val: rank > val,
+}
+
+
+def filter_links(links, query, rank_op, rank_val):
+    if query:
+        q = query.lower()
+        links = [l for l in links if q in l.get("title", "").lower()
+                                   or q in l.get("url", "").lower()]
+    if rank_op in RANK_OPS and rank_val:
+        try:
+            rank_val_int = int(rank_val)
+        except ValueError:
+            return links
+        cmp = RANK_OPS[rank_op]
+        links = [l for l in links if cmp(l.get("rank", 0), rank_val_int)]
+    return links
+
+
+def filter_by_group(links, group_filter):
+    if group_filter == "__ungrouped__":
+        return [l for l in links if not l.get("group_id")]
+    if group_filter:
+        return [l for l in links if l.get("group_id") == group_filter]
+    return links
+
+
+SORT_FIELDS = {
+    "rank":  lambda l: l.get("rank", 0),
+    "title": lambda l: l.get("title", "").lower(),
+    "url":   lambda l: l.get("url", "").lower(),
+}
+
+
+def sort_links(links, sort_field, direction):
+    key_fn = SORT_FIELDS.get(sort_field, SORT_FIELDS["rank"])
+    return sorted(links, key=key_fn, reverse=(direction == "desc"))
+
+
+def resolve_group_id(storage, user_id, group_id):
+    """Return group_id if it belongs to user_id, else ''."""
+    if not group_id:
+        return ""
+    valid_ids = {g["id"] for g in storage.get_groups(user_id)}
+    return group_id if group_id in valid_ids else ""
+
+
 @app.route("/")
 @login_required
 def index():
-    links = get_storage().get_all(current_user.id)
-    links.sort(key=lambda x: x.get("rank", 0))
-    return render_template("index.html", links=links, backend=STORAGE_BACKEND,
-                           version=APP_VERSION, app_name=APP_NAME,
-                           timeout=SESSION_TIMEOUT_MINUTES)
+    storage = get_storage()
+    links  = storage.get_all(current_user.id)
+    groups = storage.get_groups(current_user.id)
+    group_map = {g["id"]: g["name"] for g in groups}
+
+    query        = request.args.get("q", "").strip()
+    rank_op      = request.args.get("rank_op", "").strip()
+    rank_val     = request.args.get("rank_val", "").strip()
+    group_filter = request.args.get("group", "").strip()
+    sort_field   = request.args.get("sort", "rank").strip()
+    sort_dir     = request.args.get("dir", "asc").strip()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort_field not in SORT_FIELDS:
+        sort_field = "rank"
+
+    links = filter_links(links, query, rank_op, rank_val)
+    links = filter_by_group(links, group_filter)
+    links = sort_links(links, sort_field, sort_dir)
+
+    return render_template("index.html", links=links, groups=groups, group_map=group_map,
+                           backend=STORAGE_BACKEND, version=APP_VERSION, app_name=APP_NAME,
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           filter_q=query, filter_rank_op=rank_op, filter_rank_val=rank_val,
+                           filter_group=group_filter, sort_field=sort_field, sort_dir=sort_dir)
 
 
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
-    title = request.form.get("title", "").strip()
-    url   = request.form.get("url", "").strip()
-    rank  = request.form.get("rank", "0").strip()
+    title    = request.form.get("title", "").strip()
+    url      = request.form.get("url", "").strip()
+    rank     = request.form.get("rank", "0").strip()
+    group_id = request.form.get("group_id", "").strip()
     if not title or not url:
         flash("Title and URL are required.", "error")
         return redirect(url_for("index"))
@@ -173,8 +246,10 @@ def add():
         rank = int(rank)
     except ValueError:
         rank = 0
-    get_storage().add({"user_id": current_user.id, "title": title,
-                        "url": url, "rank": rank})
+    storage = get_storage()
+    group_id = resolve_group_id(storage, current_user.id, group_id)
+    storage.add({"user_id": current_user.id, "title": title,
+                 "url": url, "rank": rank, "group_id": group_id})
     flash(f"'{title}' added!", "success")
     return redirect(url_for("index"))
 
@@ -184,6 +259,38 @@ def add():
 def delete(link_id):
     get_storage().delete(link_id, current_user.id)
     flash("Link deleted.", "info")
+    return redirect(url_for("index"))
+
+
+@app.route("/groups/create", methods=["POST"])
+@login_required
+def create_group():
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Group name is required.", "error")
+    else:
+        get_storage().create_group(current_user.id, name)
+        flash(f"Group '{name}' created.", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/groups/rename/<group_id>", methods=["POST"])
+@login_required
+def rename_group(group_id):
+    name = request.form.get("name", "").strip()
+    if not name:
+        flash("Group name is required.", "error")
+    else:
+        get_storage().rename_group(group_id, current_user.id, name)
+        flash("Group renamed.", "success")
+    return redirect(url_for("index"))
+
+
+@app.route("/groups/delete/<group_id>", methods=["POST"])
+@login_required
+def delete_group(group_id):
+    get_storage().delete_group(group_id, current_user.id)
+    flash("Group deleted. Its links are now ungrouped.", "info")
     return redirect(url_for("index"))
 
 
@@ -211,15 +318,18 @@ def change_password():
 @app.route("/update/<link_id>", methods=["POST"])
 @login_required
 def update(link_id):
-    title = request.form.get("title", "").strip()
-    url   = request.form.get("url", "").strip()
-    rank  = request.form.get("rank", "0").strip()
+    title    = request.form.get("title", "").strip()
+    url      = request.form.get("url", "").strip()
+    rank     = request.form.get("rank", "0").strip()
+    group_id = request.form.get("group_id", "").strip()
     try:
         rank = int(rank)
     except ValueError:
         rank = 0
-    get_storage().update(link_id, {"title": title, "url": url, "rank": rank},
-                          current_user.id)
+    storage = get_storage()
+    group_id = resolve_group_id(storage, current_user.id, group_id)
+    storage.update(link_id, {"title": title, "url": url, "rank": rank, "group_id": group_id},
+                    current_user.id)
     flash("Link updated.", "success")
     return redirect(url_for("index"))
 
