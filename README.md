@@ -9,7 +9,7 @@ and approval.
 
 ---
 
-## New Features
+## New Features and bugfixes
 
 - Admin can change user passwords
 - User can change their own password
