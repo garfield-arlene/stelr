@@ -54,6 +54,11 @@ account will be placed in a pending queue and cannot be used until an admin
 approves it. If registration is disabled, the link is hidden and a message
 instructs you to contact an administrator.
 
+### Changing Your Password
+Click the **Change Password** button in the header. Enter your current
+password plus a new password (minimum 6 characters, entered twice to catch
+typos). Your current password must be correct for the change to take effect.
+
 ### Logging Out
 Click the **Logout** button in the top-right corner of any page.
 
@@ -106,8 +111,11 @@ username, password, and optional admin flag can be set. Accounts created this
 way are active immediately.
 
 ### Active Users
-Lists all approved accounts. Non-admin users can be deleted, which also removes
-all of their saved links. Admin accounts cannot be deleted.
+Lists all approved accounts. Each row has a **Reset PW** button that opens a
+dialog to set a new password for that user (minimum 6 characters, entered
+twice to catch typos) — no knowledge of their current password is required.
+Non-admin users can be deleted, which also removes all of their saved links.
+Admin accounts cannot be deleted.
 
 ### All Links
 A read-only view of every link saved by every user, showing the owning username,
