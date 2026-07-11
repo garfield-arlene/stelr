@@ -68,7 +68,7 @@ class MysqlPlugin(StoragePlugin):
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
             cur.execute("""
-                CREATE TABLE IF NOT EXISTS groups (
+                CREATE TABLE IF NOT EXISTS `groups` (
                     id      VARCHAR(36)  PRIMARY KEY,
                     user_id VARCHAR(36)  NOT NULL,
                     name    VARCHAR(256) NOT NULL,
@@ -241,7 +241,7 @@ class MysqlPlugin(StoragePlugin):
     def get_groups(self, user_id: str) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, user_id, name FROM groups WHERE user_id=%s ORDER BY name", (user_id,))
+        cur.execute("SELECT id, user_id, name FROM `groups` WHERE user_id=%s ORDER BY name", (user_id,))
         rows = cur.fetchall()
         cur.close(); conn.close()
         return rows
@@ -250,7 +250,7 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         group_id = str(uuid.uuid4())
-        cur.execute("INSERT INTO groups (id, user_id, name) VALUES (%s,%s,%s)",
+        cur.execute("INSERT INTO `groups` (id, user_id, name) VALUES (%s,%s,%s)",
                     (group_id, user_id, name))
         conn.commit()
         cur.close(); conn.close()
@@ -259,7 +259,7 @@ class MysqlPlugin(StoragePlugin):
     def rename_group(self, group_id: str, user_id: str, name: str):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute("UPDATE groups SET name=%s WHERE id=%s AND user_id=%s",
+        cur.execute("UPDATE `groups` SET name=%s WHERE id=%s AND user_id=%s",
                     (name, group_id, user_id))
         conn.commit()
         cur.close(); conn.close()
@@ -267,7 +267,7 @@ class MysqlPlugin(StoragePlugin):
     def delete_group(self, group_id: str, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute("DELETE FROM groups WHERE id=%s AND user_id=%s", (group_id, user_id))
+        cur.execute("DELETE FROM `groups` WHERE id=%s AND user_id=%s", (group_id, user_id))
         if cur.rowcount:
             cur.execute("UPDATE links SET group_id=NULL WHERE group_id=%s", (group_id,))
         conn.commit()

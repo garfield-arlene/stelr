@@ -1,11 +1,11 @@
 FROM python:3.12-slim
 
 LABEL maintainer="stelr"
-LABEL description="Stelr v3.5.0 — URL bookmark and ranking web app"
-LABEL version="3.5.0"
+LABEL description="Stelr v3.5.1 — URL bookmark and ranking web app"
+LABEL version="3.5.1"
 LABEL org.opencontainers.image.title="stelr"
-LABEL org.opencontainers.image.version="3.5.0"
-LABEL org.opencontainers.image.ref.name="stelr:3.5.0"
+LABEL org.opencontainers.image.version="3.5.1"
+LABEL org.opencontainers.image.ref.name="stelr:3.5.1"
 
 ENV DEBIAN_FRONTEND=noninteractive
 

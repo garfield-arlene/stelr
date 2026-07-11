@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v3.5.0**
+**v3.5.1**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -16,6 +16,8 @@ and approval.
 - Fixed MySQL backend failing to start (`rank` is a reserved keyword in MySQL 8.0+)
 - Filter entries by keyword (substring) in title or URL
 - Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
+- Group links into folders, and sort entries by clicking a column header
+- Fixed MySQL backend failing to start (`groups` is a reserved keyword in MySQL 8.0.31+)
 
 ## Features
 
@@ -27,11 +29,6 @@ and approval.
 - REST API for programmatic access
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
-
-## To Do
-
-- Sort entries by clicking the column header
-- Add groups/folders/projects to better organize related entries
 
 ---
 
@@ -94,8 +91,20 @@ link is removed.
 Use the **Filter Links** panel above the table to narrow down what's shown.
 Enter a keyword to match against the title or URL (case-insensitive substring
 match), and/or pick a rank comparison (`<`, `<=`, `==`, `>=`, `>`) with a value
-to only show links whose rank satisfies it. Both filters can be combined.
-Click **Clear** to reset.
+to only show links whose rank satisfies it. A **Group** dropdown in the same
+panel narrows the list to a single group or to ungrouped links. Filters can
+be combined. Click **Clear** to reset.
+
+### Sorting links
+Click any of the **Rank**, **Title**, or **URL** column headers to sort the
+table by that column. Clicking the same header again reverses the direction;
+an arrow next to the header shows the current sort field and direction.
+
+### Organizing links into groups
+Use the **Manage Groups** panel to create, rename, or delete groups (folders)
+for your links. When adding or editing a link, pick a group from the
+**Group** dropdown, or leave it as "No Group". Deleting a group does not
+delete its links — they simply become ungrouped.
 
 ---
 
