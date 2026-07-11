@@ -31,6 +31,7 @@ and approval.
 - Filter entries by keyword ( substring ) in title or URL
 - Filter entries by rank numerical comparison - < <= == => >
 - Sort entries by clicking the column header
+- Add groups/folders/projects to better organize related entries
 
 ---
 
