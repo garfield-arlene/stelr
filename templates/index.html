@@ -59,11 +59,14 @@
                 gap: 0.75rem; align-items: end; }
     label { display: block; font-size: 0.7rem; color: var(--muted); font-family: var(--mono);
             text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.35rem; }
-    input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
+    input[type="text"], input[type="url"], input[type="number"], input[type="password"], select {
       width: 100%; background: var(--bg); border: 1px solid var(--border);
       color: var(--text); font-family: var(--mono); font-size: 0.85rem;
       padding: 0.6rem 0.8rem; outline: none; transition: border-color 0.15s; }
-    input:focus { border-color: var(--accent); }
+    input:focus, select:focus { border-color: var(--accent); }
+    .filter-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto auto;
+                  gap: 0.75rem; align-items: end; }
+    @media (max-width: 700px) { .filter-row { grid-template-columns: 1fr; } }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
                       display: flex; align-items: center; justify-content: center; z-index: 200; }
     .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
@@ -153,6 +156,41 @@
     </form>
   </div>
 
+  <div class="add-panel">
+    <h2>// Filter Links</h2>
+    <form method="GET" action="/">
+      <div class="filter-row">
+        <div>
+          <label>Keyword (title or URL)</label>
+          <input type="text" name="q" value="{{ filter_q }}" placeholder="Search...">
+        </div>
+        <div>
+          <label>Rank</label>
+          <select name="rank_op">
+            <option value=""   {% if filter_rank_op == "" %}selected{% endif %}>Any</option>
+            <option value="<"  {% if filter_rank_op == "<" %}selected{% endif %}>&lt;</option>
+            <option value="<=" {% if filter_rank_op == "<=" %}selected{% endif %}>&le;</option>
+            <option value="==" {% if filter_rank_op == "==" %}selected{% endif %}>=</option>
+            <option value=">=" {% if filter_rank_op == ">=" %}selected{% endif %}>&ge;</option>
+            <option value=">"  {% if filter_rank_op == ">" %}selected{% endif %}>&gt;</option>
+          </select>
+        </div>
+        <div>
+          <label>Value</label>
+          <input type="number" name="rank_val" value="{{ filter_rank_val }}">
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button type="submit" class="btn btn-primary">Filter</button>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <a href="/" class="btn btn-secondary">Clear</a>
+        </div>
+      </div>
+    </form>
+  </div>
+
   {% if links %}
   <div class="table-wrap">
     <table>
@@ -201,7 +239,11 @@
   {% else %}
   <div class="empty">
     <div class="big">◈</div>
+    {% if filter_q or filter_rank_op %}
+    No links match your filter. <a href="/" style="color:var(--accent2)">Clear filter</a>
+    {% else %}
     No links yet. Add one above.
+    {% endif %}
   </div>
   {% endif %}
 </div>

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "2.5.3"
+APP_VERSION = "3.0.0"
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -150,14 +150,43 @@ def register():
 
 # ── Main app routes ────────────────────────────────────────────────────────
 
+RANK_OPS = {
+    "<":  lambda rank, val: rank < val,
+    "<=": lambda rank, val: rank <= val,
+    "==": lambda rank, val: rank == val,
+    ">=": lambda rank, val: rank >= val,
+    ">":  lambda rank, val: rank > val,
+}
+
+
+def filter_links(links, query, rank_op, rank_val):
+    if query:
+        q = query.lower()
+        links = [l for l in links if q in l.get("title", "").lower()
+                                   or q in l.get("url", "").lower()]
+    if rank_op in RANK_OPS and rank_val:
+        try:
+            rank_val_int = int(rank_val)
+        except ValueError:
+            return links
+        cmp = RANK_OPS[rank_op]
+        links = [l for l in links if cmp(l.get("rank", 0), rank_val_int)]
+    return links
+
+
 @app.route("/")
 @login_required
 def index():
     links = get_storage().get_all(current_user.id)
     links.sort(key=lambda x: x.get("rank", 0))
+    query    = request.args.get("q", "").strip()
+    rank_op  = request.args.get("rank_op", "").strip()
+    rank_val = request.args.get("rank_val", "").strip()
+    links = filter_links(links, query, rank_op, rank_val)
     return render_template("index.html", links=links, backend=STORAGE_BACKEND,
                            version=APP_VERSION, app_name=APP_NAME,
-                           timeout=SESSION_TIMEOUT_MINUTES)
+                           timeout=SESSION_TIMEOUT_MINUTES,
+                           filter_q=query, filter_rank_op=rank_op, filter_rank_val=rank_val)
 
 
 @app.route("/add", methods=["POST"])

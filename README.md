@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v2.5.3**
+**v3.0.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -14,6 +14,8 @@ and approval.
 - Admin can change user passwords
 - User can change their own password
 - Fixed MySQL backend failing to start (`rank` is a reserved keyword in MySQL 8.0+)
+- Filter entries by keyword (substring) in title or URL
+- Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
 
 ## Features
 
@@ -28,8 +30,6 @@ and approval.
 
 ## To Do
 
-- Filter entries by keyword ( substring ) in title or URL
-- Filter entries by rank numerical comparison - < <= == => >
 - Sort entries by clicking the column header
 - Add groups/folders/projects to better organize related entries
 
@@ -89,6 +89,13 @@ fields you want and click **Save**.
 ### Deleting a link
 Click the **Delete** button on any row. You will be asked to confirm before the
 link is removed.
+
+### Filtering links
+Use the **Filter Links** panel above the table to narrow down what's shown.
+Enter a keyword to match against the title or URL (case-insensitive substring
+match), and/or pick a rank comparison (`<`, `<=`, `==`, `>=`, `>`) with a value
+to only show links whose rank satisfies it. Both filters can be combined.
+Click **Clear** to reset.
 
 ---
 
