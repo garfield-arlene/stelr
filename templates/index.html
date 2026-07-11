@@ -40,6 +40,8 @@
     .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
     .btn-admin { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
     .btn-admin:hover { background: var(--danger); color: #fff; }
+    .btn-warn { background: transparent; border: 1px solid var(--accent2); color: var(--accent2); }
+    .btn-warn:hover { background: var(--accent2); color: #000; }
     .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.7rem; }
     .container { max-width: 1100px; margin: 0 auto; padding: 2rem; }
     .flash-list { list-style: none; margin-bottom: 1.5rem; }
@@ -57,11 +59,19 @@
                 gap: 0.75rem; align-items: end; }
     label { display: block; font-size: 0.7rem; color: var(--muted); font-family: var(--mono);
             text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.35rem; }
-    input[type="text"], input[type="url"], input[type="number"] {
+    input[type="text"], input[type="url"], input[type="number"], input[type="password"] {
       width: 100%; background: var(--bg); border: 1px solid var(--border);
       color: var(--text); font-family: var(--mono); font-size: 0.85rem;
       padding: 0.6rem 0.8rem; outline: none; transition: border-color 0.15s; }
     input:focus { border-color: var(--accent); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+                      display: flex; align-items: center; justify-content: center; z-index: 200; }
+    .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
+    .modal h2 { font-family: var(--mono); font-size: 0.8rem; color: var(--muted);
+                text-transform: uppercase; letter-spacing: 2px; margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.2rem; }
+    .modal-error { color: var(--danger); font-family: var(--mono); font-size: 0.72rem; margin-top: 0.5rem; }
+    .modal label:not(:first-child) { margin-top: 0.75rem; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     thead tr { border-bottom: 2px solid var(--border); }
@@ -102,6 +112,7 @@
   <span class="backend-badge" title="Session timeout">⏱ {{ timeout }}m</span>
   <div class="header-right">
     <span class="user-info">logged in as <strong>{{ current_user.username }}</strong></span>
+    <button type="button" class="btn btn-warn btn-sm" onclick="openChangePasswordModal()">Change Password</button>
     {% if current_user.is_admin %}
     <a href="/admin" class="btn btn-admin btn-sm">Admin</a>
     {% endif %}
@@ -195,9 +206,52 @@
   {% endif %}
 </div>
 
+<!-- ── Change password modal ── -->
+<div class="modal-overlay" id="change-pw-modal" style="display:none">
+  <div class="modal">
+    <h2>// Change Password</h2>
+    <form method="POST" action="/change_password" id="change-pw-form" onsubmit="return validateChangePasswordForm()">
+      <label for="current-pw-input">Current Password</label>
+      <input type="password" id="current-pw-input" name="current_password" required autocomplete="current-password">
+      <label for="new-pw-input">New Password</label>
+      <input type="password" id="new-pw-input" name="new_password" minlength="6" required autocomplete="new-password">
+      <label for="new-pw-confirm">Confirm New Password</label>
+      <input type="password" id="new-pw-confirm" minlength="6" required autocomplete="new-password">
+      <div class="modal-error" id="change-pw-error" style="display:none">New passwords do not match.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeChangePasswordModal()">Cancel</button>
+        <button type="submit" class="btn btn-warn btn-sm">Change</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script>
   function toggleEdit(id) {
     document.getElementById('edit-' + id).classList.toggle('open');
+  }
+
+  function openChangePasswordModal() {
+    document.getElementById('change-pw-form').reset();
+    document.getElementById('change-pw-error').style.display = 'none';
+    document.getElementById('change-pw-modal').style.display = 'flex';
+    document.getElementById('current-pw-input').focus();
+  }
+
+  function closeChangePasswordModal() {
+    document.getElementById('change-pw-modal').style.display = 'none';
+  }
+
+  function validateChangePasswordForm() {
+    const pw      = document.getElementById('new-pw-input').value;
+    const confirm = document.getElementById('new-pw-confirm').value;
+    const error   = document.getElementById('change-pw-error');
+    if (pw !== confirm) {
+      error.style.display = '';
+      return false;
+    }
+    error.style.display = 'none';
+    return true;
   }
 </script>
 </body>

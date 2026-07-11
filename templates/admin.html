@@ -83,6 +83,12 @@
     .reg-status { font-family: var(--mono); font-size: 0.78rem; }
     .reg-on  { color: var(--accent); }
     .reg-off { color: var(--danger); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+                      display: flex; align-items: center; justify-content: center; z-index: 200; }
+    .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
+    .modal h2 { margin-bottom: 1rem; }
+    .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.2rem; }
+    .modal-error { color: var(--danger); font-family: var(--mono); font-size: 0.72rem; margin-top: 0.5rem; }
     @media (max-width: 700px) { .form-row { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -194,12 +200,16 @@
           <td>{{ user.username }}</td>
           <td>{% if user.is_admin %}<span class="tag tag-admin">ADMIN</span>{% else %}user{% endif %}</td>
           <td onclick="event.stopPropagation()">
-            {% if user.id != current_user.id %}
-            <form method="POST" action="/admin/delete_user/{{ user.id }}"
-                  onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
-              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
-            {% endif %}
+            <div class="actions">
+              <button type="button" class="btn btn-warn btn-sm"
+                      onclick="resetPassword('{{ user.id }}', '{{ user.username }}')">Reset PW</button>
+              {% if user.id != current_user.id %}
+              <form method="POST" action="/admin/delete_user/{{ user.id }}"
+                    onsubmit="return confirm('Delete {{ user.username }} and all their links?')">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+              </form>
+              {% endif %}
+            </div>
           </td>
           <td style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">click to view links ›</td>
         </tr>
@@ -226,6 +236,24 @@
     <div class="empty" id="user-links-empty" style="display:none">This user has no links.</div>
   </div>
 
+</div>
+
+<!-- ── Reset password modal ── -->
+<div class="modal-overlay" id="reset-pw-modal" style="display:none">
+  <div class="modal">
+    <h2>// Reset Password for <span id="reset-pw-username"></span></h2>
+    <form method="POST" id="reset-pw-form" onsubmit="return validateResetPasswordForm()">
+      <label for="reset-pw-input">New Password</label>
+      <input type="password" id="reset-pw-input" name="password" minlength="6" required autocomplete="new-password">
+      <label for="reset-pw-confirm" style="margin-top:0.75rem">Confirm Password</label>
+      <input type="password" id="reset-pw-confirm" minlength="6" required autocomplete="new-password">
+      <div class="modal-error" id="reset-pw-error" style="display:none">Passwords do not match.</div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeResetPasswordModal()">Cancel</button>
+        <button type="submit" class="btn btn-warn btn-sm">Reset</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -279,6 +307,32 @@
 
     document.getElementById('selected-username').textContent = username;
     document.getElementById('user-links-section').style.display = '';
+  }
+
+  function resetPassword(userId, username) {
+    document.getElementById('reset-pw-username').textContent = username;
+    document.getElementById('reset-pw-form').action = '/admin/reset_password/' + userId;
+    document.getElementById('reset-pw-input').value = '';
+    document.getElementById('reset-pw-confirm').value = '';
+    document.getElementById('reset-pw-error').style.display = 'none';
+    document.getElementById('reset-pw-modal').style.display = 'flex';
+    document.getElementById('reset-pw-input').focus();
+  }
+
+  function closeResetPasswordModal() {
+    document.getElementById('reset-pw-modal').style.display = 'none';
+  }
+
+  function validateResetPasswordForm() {
+    const pw      = document.getElementById('reset-pw-input').value;
+    const confirm = document.getElementById('reset-pw-confirm').value;
+    const error   = document.getElementById('reset-pw-error');
+    if (pw !== confirm) {
+      error.style.display = '';
+      return false;
+    }
+    error.style.display = 'none';
+    return true;
   }
 
   function clearSelection() {

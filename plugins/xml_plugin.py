@@ -117,6 +117,17 @@ class XmlPlugin(StoragePlugin):
                 links_el.remove(el)
         self._write(root)
 
+    def set_password(self, user_id: str, password_hash: str):
+        root = self._load()
+        for el in root.find("users").findall("user"):
+            if el.get("id") == user_id:
+                pw_el = el.find("password_hash")
+                if pw_el is None:
+                    pw_el = ET.SubElement(el, "password_hash")
+                pw_el.text = password_hash
+                break
+        self._write(root)
+
     # ── Pending registrations ──────────────────────────────────────────────
 
     def get_pending_users(self) -> List[Dict[str, Any]]:

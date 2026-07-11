@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v2.0.0**
+**v2.5.2**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -8,6 +8,11 @@ User accounts are required to access the app, with admin-controlled registration
 and approval.
 
 ---
+
+## New Features
+
+- Admin can change user passwords
+- User can change their own password
 
 ## Features
 
@@ -19,6 +24,12 @@ and approval.
 - REST API for programmatic access
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
+
+## To Do
+
+- Filter entries by keyword ( substring ) in title or URL
+- Filter entries by rank numerical comparison - < <= == => >
+- Sort entries by clicking the column header
 
 ---
 
@@ -43,6 +54,11 @@ page. Fill in a username and password (minimum 6 characters) and submit. Your
 account will be placed in a pending queue and cannot be used until an admin
 approves it. If registration is disabled, the link is hidden and a message
 instructs you to contact an administrator.
+
+### Changing Your Password
+Click the **Change Password** button in the header. Enter your current
+password plus a new password (minimum 6 characters, entered twice to catch
+typos). Your current password must be correct for the change to take effect.
 
 ### Logging Out
 Click the **Logout** button in the top-right corner of any page.
@@ -96,8 +112,11 @@ username, password, and optional admin flag can be set. Accounts created this
 way are active immediately.
 
 ### Active Users
-Lists all approved accounts. Non-admin users can be deleted, which also removes
-all of their saved links. Admin accounts cannot be deleted.
+Lists all approved accounts. Each row has a **Reset PW** button that opens a
+dialog to set a new password for that user (minimum 6 characters, entered
+twice to catch typos) — no knowledge of their current password is required.
+Non-admin users can be deleted, which also removes all of their saved links.
+Admin accounts cannot be deleted.
 
 ### All Links
 A read-only view of every link saved by every user, showing the owning username,

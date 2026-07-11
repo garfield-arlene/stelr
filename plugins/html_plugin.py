@@ -120,6 +120,16 @@ class HtmlPlugin(StoragePlugin):
             li.decompose()
         self._save(soup)
 
+    def set_password(self, user_id: str, password_hash: str):
+        soup = self._load()
+        users = self._get_users(soup)
+        for u in users:
+            if u.get("id") == user_id:
+                u["password_hash"] = password_hash
+                break
+        self._set_users(soup, users)
+        self._save(soup)
+
     def get_pending_users(self) -> List[Dict[str, Any]]:
         return [u for u in self._get_users(self._load()) if not u.get("approved", True)]
 

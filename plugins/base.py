@@ -49,6 +49,10 @@ class StoragePlugin(ABC):
     def delete_user(self, user_id: str) -> None:
         """Delete a user and all their links."""
 
+    @abstractmethod
+    def set_password(self, user_id: str, password_hash: str) -> None:
+        """Set a user's password hash."""
+
     # ── Pending registrations ──────────────────────────────────────────────
 
     @abstractmethod
