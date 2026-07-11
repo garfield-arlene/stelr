@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v3.0.0**
+**v3.5.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -135,10 +135,61 @@ title, URL, and rank.
 
 ## REST API
 
-| Endpoint      | Auth required | Description                                    |
-|---------------|---------------|------------------------------------------------|
-| `/api/links`  | Yes           | Returns your links as JSON, sorted by rank     |
-| `/health`     | No            | Returns app status, version, and active backend |
+Stelr exposes a small JSON API for reading your own links programmatically.
+There's no separate API token — authentication reuses the same session
+cookie as the web UI, so a client needs to log in first and carry that
+cookie on subsequent requests.
+
+| Endpoint      | Method | Auth required | Description                                      |
+|---------------|--------|----------------|---------------------------------------------------|
+| `/login`      | POST   | No             | Authenticate; sets the session cookie             |
+| `/api/links`  | GET    | Yes            | Returns your links as JSON, sorted by rank        |
+| `/health`     | GET    | No             | Returns app status, version, and active backend   |
+
+### Authenticating
+
+Log in with a cookie jar so the session persists across requests:
+
+```bash
+curl -c cookies.txt -X POST http://localhost:8082/login \
+  -d "username=myuser" -d "password=mypassword"
+```
+
+### Fetching your links
+
+```bash
+curl -b cookies.txt http://localhost:8082/api/links
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": "b6b9c2b0-3f1a-4e2c-9a1d-8f3e2c1d0a9b",
+    "user_id": "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d",
+    "title": "GitHub",
+    "url": "https://github.com",
+    "rank": 1,
+    "group_id": ""
+  }
+]
+```
+
+`group_id` is an empty string when a link isn't assigned to a group.
+
+### Health check
+
+No authentication required — useful for uptime checks and container
+healthchecks.
+
+```bash
+curl http://localhost:8082/health
+```
+
+```json
+{"status": "ok", "version": "<version>", "backend": "xml"}
+```
 
 ---
 

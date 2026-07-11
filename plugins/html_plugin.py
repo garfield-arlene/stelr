@@ -16,6 +16,7 @@ TEMPLATE = """<!DOCTYPE html>
 <body>
 <script id="stelr-users" type="application/json">[]</script>
 <script id="stelr-settings" type="application/json">{}</script>
+<script id="stelr-groups" type="application/json">[]</script>
 <ul id="links"></ul>
 </body>
 </html>"""
@@ -41,6 +42,11 @@ class HtmlPlugin(StoragePlugin):
                 tag = soup.new_tag("script", id="stelr-settings", type="application/json")
                 tag.string = "{}"
                 soup.body.insert(1, tag)
+                dirty = True
+            if not soup.find("script", id="stelr-groups"):
+                tag = soup.new_tag("script", id="stelr-groups", type="application/json")
+                tag.string = "[]"
+                soup.body.insert(2, tag)
                 dirty = True
             if dirty:
                 self._save(soup)
@@ -152,11 +158,12 @@ class HtmlPlugin(StoragePlugin):
 
     def _li_to_dict(self, li) -> Dict[str, Any]:
         return {
-            "id":      li.get("data-id", ""),
-            "user_id": li.get("data-user-id", ""),
-            "title":   li.get("data-title", ""),
-            "url":     li.get("data-url", ""),
-            "rank":    int(li.get("data-rank", "0")),
+            "id":       li.get("data-id", ""),
+            "user_id":  li.get("data-user-id", ""),
+            "title":    li.get("data-title", ""),
+            "url":      li.get("data-url", ""),
+            "rank":     int(li.get("data-rank", "0")),
+            "group_id": li.get("data-group-id", ""),
         }
 
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
@@ -174,6 +181,7 @@ class HtmlPlugin(StoragePlugin):
             "data-id": link_id, "data-user-id": link.get("user_id", ""),
             "data-title": link.get("title", ""), "data-url": link.get("url", ""),
             "data-rank": str(link.get("rank", 0)),
+            "data-group-id": link.get("group_id", ""),
         })
         a = soup.new_tag("a", href=link.get("url", ""))
         a.string = link.get("title", "")
@@ -193,11 +201,57 @@ class HtmlPlugin(StoragePlugin):
         soup = self._load()
         for li in soup.select(f"li[data-id='{link_id}']"):
             if li.get("data-user-id") == user_id:
-                li["data-title"] = link.get("title", "")
-                li["data-url"]   = link.get("url", "")
-                li["data-rank"]  = str(link.get("rank", 0))
+                li["data-title"]    = link.get("title", "")
+                li["data-url"]      = link.get("url", "")
+                li["data-rank"]     = str(link.get("rank", 0))
+                li["data-group-id"] = link.get("group_id", "")
                 a = li.find("a")
                 if a:
                     a["href"] = link.get("url", "")
                     a.string  = link.get("title", "")
+        self._save(soup)
+
+    # ── Groups ─────────────────────────────────────────────────────────────
+
+    def _get_groups(self, soup: BeautifulSoup) -> List[Dict]:
+        tag = soup.find("script", id="stelr-groups")
+        return json.loads(tag.string or "[]") if tag else []
+
+    def _set_groups(self, soup: BeautifulSoup, groups: List[Dict]):
+        tag = soup.find("script", id="stelr-groups")
+        if not tag:
+            tag = soup.new_tag("script", id="stelr-groups", type="application/json")
+            soup.body.insert(0, tag)
+        tag.string = json.dumps(groups)
+
+    def get_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        return [g for g in self._get_groups(self._load()) if g.get("user_id") == user_id]
+
+    def create_group(self, user_id: str, name: str) -> str:
+        soup = self._load()
+        groups = self._get_groups(soup)
+        group_id = str(uuid.uuid4())
+        groups.append({"id": group_id, "user_id": user_id, "name": name})
+        self._set_groups(soup, groups)
+        self._save(soup)
+        return group_id
+
+    def rename_group(self, group_id: str, user_id: str, name: str):
+        soup = self._load()
+        groups = self._get_groups(soup)
+        for g in groups:
+            if g.get("id") == group_id and g.get("user_id") == user_id:
+                g["name"] = name
+                break
+        self._set_groups(soup, groups)
+        self._save(soup)
+
+    def delete_group(self, group_id: str, user_id: str):
+        soup = self._load()
+        groups = self._get_groups(soup)
+        remaining = [g for g in groups if not (g.get("id") == group_id and g.get("user_id") == user_id)]
+        if len(remaining) != len(groups):
+            for li in soup.select(f"li[data-group-id='{group_id}']"):
+                li["data-group-id"] = ""
+        self._set_groups(soup, remaining)
         self._save(soup)

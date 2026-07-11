@@ -67,10 +67,22 @@ class MysqlPlugin(StoragePlugin):
                     `value` TEXT
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS groups (
+                    id      VARCHAR(36)  PRIMARY KEY,
+                    user_id VARCHAR(36)  NOT NULL,
+                    name    VARCHAR(256) NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """)
             # Migrate: add approved column if missing
             cur.execute("SHOW COLUMNS FROM users LIKE 'approved'")
             if not cur.fetchone():
                 cur.execute("ALTER TABLE users ADD COLUMN approved TINYINT(1) DEFAULT 1")
+            # Migrate: add group_id column if missing
+            cur.execute("SHOW COLUMNS FROM links LIKE 'group_id'")
+            if not cur.fetchone():
+                cur.execute("ALTER TABLE links ADD COLUMN group_id VARCHAR(36) NULL")
             conn.commit()
             cur.close(); conn.close()
             logger.info("[mysql] Tables ready.")
@@ -180,7 +192,7 @@ class MysqlPlugin(StoragePlugin):
     def get_all(self, user_id: str) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, user_id, title, url, `rank` FROM links "
+        cur.execute("SELECT id, user_id, title, url, `rank`, group_id FROM links "
                     "WHERE user_id=%s ORDER BY `rank`", (user_id,))
         rows = cur.fetchall()
         cur.close(); conn.close()
@@ -189,7 +201,7 @@ class MysqlPlugin(StoragePlugin):
     def get_all_links_admin(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT l.id, l.user_id, u.username, l.title, l.url, l.`rank` "
+        cur.execute("SELECT l.id, l.user_id, u.username, l.title, l.url, l.`rank`, l.group_id "
                     "FROM links l JOIN users u ON l.user_id=u.id ORDER BY u.username, l.`rank`")
         rows = cur.fetchall()
         cur.close(); conn.close()
@@ -199,8 +211,10 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         link_id = str(uuid.uuid4())
-        cur.execute("INSERT INTO links (id, user_id, title, url, `rank`) VALUES (%s,%s,%s,%s,%s)",
-                    (link_id, link["user_id"], link["title"], link["url"], link.get("rank", 0)))
+        cur.execute("INSERT INTO links (id, user_id, title, url, `rank`, group_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s)",
+                    (link_id, link["user_id"], link["title"], link["url"],
+                     link.get("rank", 0), link.get("group_id") or None))
         conn.commit()
         cur.close(); conn.close()
         return link_id
@@ -215,7 +229,46 @@ class MysqlPlugin(StoragePlugin):
     def update(self, link_id: str, link: Dict[str, Any], user_id: str):
         conn = self._conn()
         cur = conn.cursor()
-        cur.execute("UPDATE links SET title=%s, url=%s, `rank`=%s WHERE id=%s AND user_id=%s",
-                    (link["title"], link["url"], link.get("rank", 0), link_id, user_id))
+        cur.execute("UPDATE links SET title=%s, url=%s, `rank`=%s, group_id=%s "
+                    "WHERE id=%s AND user_id=%s",
+                    (link["title"], link["url"], link.get("rank", 0),
+                     link.get("group_id") or None, link_id, user_id))
+        conn.commit()
+        cur.close(); conn.close()
+
+    # ── Groups ─────────────────────────────────────────────────────────────
+
+    def get_groups(self, user_id: str) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, user_id, name FROM groups WHERE user_id=%s ORDER BY name", (user_id,))
+        rows = cur.fetchall()
+        cur.close(); conn.close()
+        return rows
+
+    def create_group(self, user_id: str, name: str) -> str:
+        conn = self._conn()
+        cur = conn.cursor()
+        group_id = str(uuid.uuid4())
+        cur.execute("INSERT INTO groups (id, user_id, name) VALUES (%s,%s,%s)",
+                    (group_id, user_id, name))
+        conn.commit()
+        cur.close(); conn.close()
+        return group_id
+
+    def rename_group(self, group_id: str, user_id: str, name: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("UPDATE groups SET name=%s WHERE id=%s AND user_id=%s",
+                    (name, group_id, user_id))
+        conn.commit()
+        cur.close(); conn.close()
+
+    def delete_group(self, group_id: str, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM groups WHERE id=%s AND user_id=%s", (group_id, user_id))
+        if cur.rowcount:
+            cur.execute("UPDATE links SET group_id=NULL WHERE group_id=%s", (group_id,))
         conn.commit()
         cur.close(); conn.close()
