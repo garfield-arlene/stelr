@@ -64,11 +64,11 @@ services:
 
   app-mysql:
     <<: *app-base
-    container_name: stelr
+    container_name: stelr-web-mysql
     environment:
       <<: *app-env
       STORAGE_BACKEND: mysql
-      MYSQL_HOST: mysql
+      MYSQL_HOST: stelr-db-mysql
       MYSQL_PORT: "3306"
       MYSQL_USER: stelr
       MYSQL_PASSWORD: stelr
@@ -80,7 +80,7 @@ services:
 
   mysql:
     image: mysql:8.3
-    container_name: stelr-mysql
+    container_name: stelr-db-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
