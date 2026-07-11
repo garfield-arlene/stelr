@@ -9,11 +9,12 @@ and approval.
 
 ---
 
-## Features
+## New Features
 
-**New:**
 - Admin can change user passwords
 - User can change their own password
+
+## Features
 
 - Save URLs with a title and rank
 - Edit or delete any saved link
