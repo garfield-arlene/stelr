@@ -1,7 +1,7 @@
 version: "3.9"
 
 # ─────────────────────────────────────────────
-# Stelr v3.5.1 — docker compose
+# Stelr v3.5.2 — docker compose
 # Usage:
 #   XML (default):    docker compose up
 #   YAML:             docker compose --profile yaml up
@@ -14,7 +14,7 @@ version: "3.9"
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  image: stelr:3.5.1
+  image: stelr:3.5.2
   restart: unless-stopped
   ports:
     - "8082:5000"
@@ -31,7 +31,7 @@ services:
 
   app-xml:
     <<: *app-base
-    container_name: stelr
+    container_name: stelr-web-xml
     environment:
       <<: *app-env
       STORAGE_BACKEND: xml
@@ -53,7 +53,7 @@ services:
 
   app-html:
     <<: *app-base
-    container_name: stelr
+    container_name: stelr-web-html
     environment:
       <<: *app-env
       STORAGE_BACKEND: html
