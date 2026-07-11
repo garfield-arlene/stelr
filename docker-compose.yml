@@ -42,7 +42,7 @@ services:
 
   app-yaml:
     <<: *app-base
-    container_name: stelr
+    container_name: stelr-web-yaml
     environment:
       <<: *app-env
       STORAGE_BACKEND: yaml
