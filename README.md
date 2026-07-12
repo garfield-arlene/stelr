@@ -31,8 +31,9 @@ and approval.
 
 ## To do
 
-- Update UI to hide URL on mobile devices
-- Add ability to "click to add another entry" for the same "save call"
+- Update UI to hide/show URL
+- Update UI to be mobile friendly - it currently requires horizontal scrolling
+- Add ability to "click to add another entry" before saving
 
 ---
 
