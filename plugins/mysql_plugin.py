@@ -2,6 +2,7 @@ import os
 import uuid
 import logging
 import mysql.connector
+import mysql.connector.pooling
 from typing import List, Dict, Any, Optional
 from plugins.base import StoragePlugin
 
@@ -10,12 +11,19 @@ logger = logging.getLogger(__name__)
 
 class MysqlPlugin(StoragePlugin):
     def __init__(self):
-        self.host     = os.environ.get("MYSQL_HOST", "mysql")
-        self.port     = int(os.environ.get("MYSQL_PORT", "3306"))
-        self.user     = os.environ.get("MYSQL_USER", "stelr")
-        self.password = os.environ.get("MYSQL_PASSWORD", "stelr")
-        self.database = os.environ.get("MYSQL_DATABASE", "stelr")
-        self._bootstrap()
+        self.host      = os.environ.get("MYSQL_HOST", "mysql")
+        self.port      = int(os.environ.get("MYSQL_PORT", "3306"))
+        self.user      = os.environ.get("MYSQL_USER", "stelr")
+        self.password  = os.environ.get("MYSQL_PASSWORD", "stelr")
+        self.database  = os.environ.get("MYSQL_DATABASE", "stelr")
+        self.pool_size = int(os.environ.get("MYSQL_POOL_SIZE", "10"))
+        self._ensure_database()
+        self._pool = mysql.connector.pooling.MySQLConnectionPool(
+            pool_name="stelr_pool", pool_size=self.pool_size, autocommit=True,
+            host=self.host, port=self.port,
+            user=self.user, password=self.password,
+            database=self.database)
+        self._create_tables()
 
     def _root_conn(self):
         return mysql.connector.connect(
@@ -23,12 +31,9 @@ class MysqlPlugin(StoragePlugin):
             user=self.user, password=self.password)
 
     def _conn(self):
-        return mysql.connector.connect(
-            host=self.host, port=self.port,
-            user=self.user, password=self.password,
-            database=self.database)
+        return self._pool.get_connection()
 
-    def _bootstrap(self):
+    def _ensure_database(self):
         try:
             conn = self._root_conn()
             cur = conn.cursor()
@@ -39,6 +44,7 @@ class MysqlPlugin(StoragePlugin):
         except Exception as e:
             raise RuntimeError(f"[mysql] Could not create database: {e}")
 
+    def _create_tables(self):
         try:
             conn = self._conn()
             cur = conn.cursor()
@@ -83,7 +89,6 @@ class MysqlPlugin(StoragePlugin):
             cur.execute("SHOW COLUMNS FROM links LIKE 'group_id'")
             if not cur.fetchone():
                 cur.execute("ALTER TABLE links ADD COLUMN group_id VARCHAR(36) NULL")
-            conn.commit()
             cur.close(); conn.close()
             logger.info("[mysql] Tables ready.")
         except Exception as e:
@@ -103,7 +108,6 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("REPLACE INTO settings (`key`, `value`) VALUES (%s, %s)", (key, value))
-        conn.commit()
         cur.close(); conn.close()
 
     # ── Users ──────────────────────────────────────────────────────────────
@@ -137,7 +141,6 @@ class MysqlPlugin(StoragePlugin):
         cur.execute("INSERT INTO users (id, username, password_hash, is_admin, approved) "
                     "VALUES (%s,%s,%s,%s,%s)",
                     (user_id, username, password_hash, int(is_admin), int(approved)))
-        conn.commit()
         cur.close(); conn.close()
         return user_id
 
@@ -154,14 +157,12 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
-        conn.commit()
         cur.close(); conn.close()
 
     def set_password(self, user_id: str, password_hash: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (password_hash, user_id))
-        conn.commit()
         cur.close(); conn.close()
 
     def get_pending_users(self) -> List[Dict[str, Any]]:
@@ -177,14 +178,12 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("UPDATE users SET approved=1 WHERE id=%s", (user_id,))
-        conn.commit()
         cur.close(); conn.close()
 
     def reject_user(self, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s AND approved=0", (user_id,))
-        conn.commit()
         cur.close(); conn.close()
 
     # ── Links ──────────────────────────────────────────────────────────────
@@ -215,7 +214,6 @@ class MysqlPlugin(StoragePlugin):
                     "VALUES (%s,%s,%s,%s,%s,%s)",
                     (link_id, link["user_id"], link["title"], link["url"],
                      link.get("rank", 0), link.get("group_id") or None))
-        conn.commit()
         cur.close(); conn.close()
         return link_id
 
@@ -223,7 +221,6 @@ class MysqlPlugin(StoragePlugin):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM links WHERE id=%s AND user_id=%s", (link_id, user_id))
-        conn.commit()
         cur.close(); conn.close()
 
     def update(self, link_id: str, link: Dict[str, Any], user_id: str):
@@ -233,7 +230,6 @@ class MysqlPlugin(StoragePlugin):
                     "WHERE id=%s AND user_id=%s",
                     (link["title"], link["url"], link.get("rank", 0),
                      link.get("group_id") or None, link_id, user_id))
-        conn.commit()
         cur.close(); conn.close()
 
     # ── Groups ─────────────────────────────────────────────────────────────
@@ -252,7 +248,6 @@ class MysqlPlugin(StoragePlugin):
         group_id = str(uuid.uuid4())
         cur.execute("INSERT INTO `groups` (id, user_id, name) VALUES (%s,%s,%s)",
                     (group_id, user_id, name))
-        conn.commit()
         cur.close(); conn.close()
         return group_id
 
@@ -261,7 +256,6 @@ class MysqlPlugin(StoragePlugin):
         cur = conn.cursor()
         cur.execute("UPDATE `groups` SET name=%s WHERE id=%s AND user_id=%s",
                     (name, group_id, user_id))
-        conn.commit()
         cur.close(); conn.close()
 
     def delete_group(self, group_id: str, user_id: str):
@@ -270,5 +264,4 @@ class MysqlPlugin(StoragePlugin):
         cur.execute("DELETE FROM `groups` WHERE id=%s AND user_id=%s", (group_id, user_id))
         if cur.rowcount:
             cur.execute("UPDATE links SET group_id=NULL WHERE group_id=%s", (group_id,))
-        conn.commit()
         cur.close(); conn.close()

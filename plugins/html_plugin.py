@@ -24,6 +24,8 @@ TEMPLATE = """<!DOCTYPE html>
 
 class HtmlPlugin(StoragePlugin):
     def __init__(self):
+        self._cache = None
+        self._cache_mtime = None
         self._bootstrap()
 
     def _bootstrap(self):
@@ -53,12 +55,20 @@ class HtmlPlugin(StoragePlugin):
             logger.info(f"[html] Data file '{DATA_FILE}' loaded OK.")
 
     def _load(self) -> BeautifulSoup:
+        mtime = os.path.getmtime(DATA_FILE)
+        if self._cache is not None and self._cache_mtime == mtime:
+            return self._cache
         with open(DATA_FILE, "r") as f:
-            return BeautifulSoup(f.read(), "html.parser")
+            soup = BeautifulSoup(f.read(), "html.parser")
+        self._cache = soup
+        self._cache_mtime = mtime
+        return soup
 
     def _save(self, soup: BeautifulSoup):
         with open(DATA_FILE, "w") as f:
             f.write(soup.prettify())
+        self._cache = soup
+        self._cache_mtime = os.path.getmtime(DATA_FILE)
 
     # ── Settings ───────────────────────────────────────────────────────────
 

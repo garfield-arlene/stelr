@@ -1,7 +1,7 @@
 version: "3.9"
 
 # ─────────────────────────────────────────────
-# Stelr v3.5.2 — docker compose
+# Stelr v4.1.1 — docker compose
 # Usage:
 #   XML (default):    docker compose up
 #   YAML:             docker compose --profile yaml up
@@ -11,10 +11,16 @@ version: "3.9"
 #
 # Override admin credentials:
 #   ADMIN_USERNAME=myuser ADMIN_PASSWORD=mypass docker compose up
+#
+# MySQL write durability vs. speed (default is fully durable):
+#   MYSQL_FLUSH_LOG_AT_TRX_COMMIT=2 docker compose --profile mysql up
+#   1 (default) - fsync on every commit; survives any crash, slowest writes
+#   2           - fsync once/sec; survives MySQL crashes, up to ~1s lost on OS/power loss
+#   0           - fsync once/sec; up to ~1s lost on MySQL crash too
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  image: stelr:3.5.2
+  image: stelr:4.1.1
   restart: unless-stopped
   ports:
     - "8082:5000"
@@ -82,6 +88,7 @@ services:
     image: mysql:8.3
     container_name: stelr-db-mysql
     restart: unless-stopped
+    command: --innodb-flush-log-at-trx-commit=${MYSQL_FLUSH_LOG_AT_TRX_COMMIT:-1}
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
       MYSQL_DATABASE: stelr

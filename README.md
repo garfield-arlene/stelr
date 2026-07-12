@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v3.5.2**
+**v4.1.1**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,13 +11,7 @@ and approval.
 
 ## New features and bug fixes
 
-- Admin can change user passwords
-- User can change their own password
-- Fixed MySQL backend failing to start (`rank` is a reserved keyword in MySQL 8.0+)
-- Filter entries by keyword (substring) in title or URL
-- Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
-- Group links into folders, and sort entries by clicking a column header
-- Fixed MySQL backend failing to start (`groups` is a reserved keyword in MySQL 8.0.31+)
+- Fixed slow add/delete on the MySQL and PostgreSQL backends by pooling database connections instead of opening a new one for every query
 
 ## Features
 
@@ -29,6 +23,16 @@ and approval.
 - REST API for programmatic access
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
+- Admin can change user passwords
+- User can change their own password
+- Filter entries by keyword (substring) in title or URL
+- Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
+- Group links into folders, and sort entries by clicking a column header
+
+## To do
+
+- Update UI to hide URL on mobile devices
+- Add ability to "click to add another entry" for the same "save call"
 
 ---
 
@@ -258,6 +262,17 @@ STORAGE_BACKEND=mysql
 | `MYSQL_USER`     | `stelr` | Username      |
 | `MYSQL_PASSWORD` | `stelr` | Password      |
 | `MYSQL_DATABASE` | `stelr` | Database name |
+| `MYSQL_POOL_SIZE` | `10` | Max pooled connections |
+
+`MYSQL_FLUSH_LOG_AT_TRX_COMMIT` (default `1`, set on the `mysql` container, not the app) controls
+InnoDB's write durability vs. speed. `1` fsyncs on every commit and survives any crash, but is the
+slowest. `2` only fsyncs once/sec — writes are much faster, but up to ~1 second of the most recent
+adds/deletes can be lost if the *host* (not just MySQL) crashes or loses power. `0` is faster still
+but can also lose data on a plain MySQL crash. Example:
+
+```bash
+MYSQL_FLUSH_LOG_AT_TRX_COMMIT=2 podman compose --profile mysql up
+```
 
 ---
 
@@ -276,6 +291,7 @@ STORAGE_BACKEND=postgresql
 | `POSTGRES_USER`     | `stelr`    | Username      |
 | `POSTGRES_PASSWORD` | `stelr`    | Password      |
 | `POSTGRES_DB`       | `stelr`    | Database name |
+| `POSTGRES_POOL_SIZE`| `10`       | Max pooled connections |
 
 ---
 

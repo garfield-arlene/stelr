@@ -12,6 +12,8 @@ DATA_FILE = os.environ.get("YAML_FILE", "/data/links.yaml")
 
 class YamlPlugin(StoragePlugin):
     def __init__(self):
+        self._cache = None
+        self._cache_mtime = None
         self._bootstrap()
 
     def _bootstrap(self):
@@ -40,19 +42,26 @@ class YamlPlugin(StoragePlugin):
                 raise RuntimeError(f"[yaml] Invalid YAML in '{DATA_FILE}': {e}")
 
     def _load(self) -> Dict:
+        mtime = os.path.getmtime(DATA_FILE)
+        if self._cache is not None and self._cache_mtime == mtime:
+            return self._cache
         with open(DATA_FILE, "r") as f:
             data = yaml.safe_load(f)
         if not data:
-            return {"users": [], "links": [], "settings": {}, "groups": []}
+            data = {"users": [], "links": [], "settings": {}, "groups": []}
         data.setdefault("users", [])
         data.setdefault("links", [])
         data.setdefault("settings", {})
         data.setdefault("groups", [])
+        self._cache = data
+        self._cache_mtime = mtime
         return data
 
     def _write(self, data: Dict):
         with open(DATA_FILE, "w") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True)
+        self._cache = data
+        self._cache_mtime = os.path.getmtime(DATA_FILE)
 
     # ── Settings ───────────────────────────────────────────────────────────
 
