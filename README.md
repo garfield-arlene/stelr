@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v4.0.0**
+**v4.1.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -263,6 +263,16 @@ STORAGE_BACKEND=mysql
 | `MYSQL_PASSWORD` | `stelr` | Password      |
 | `MYSQL_DATABASE` | `stelr` | Database name |
 | `MYSQL_POOL_SIZE` | `10` | Max pooled connections |
+
+`MYSQL_FLUSH_LOG_AT_TRX_COMMIT` (default `1`, set on the `mysql` container, not the app) controls
+InnoDB's write durability vs. speed. `1` fsyncs on every commit and survives any crash, but is the
+slowest. `2` only fsyncs once/sec — writes are much faster, but up to ~1 second of the most recent
+adds/deletes can be lost if the *host* (not just MySQL) crashes or loses power. `0` is faster still
+but can also lose data on a plain MySQL crash. Example:
+
+```bash
+MYSQL_FLUSH_LOG_AT_TRX_COMMIT=2 podman compose --profile mysql up
+```
 
 ---
 
