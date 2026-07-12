@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v4.1.0**
+**v4.1.1**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
