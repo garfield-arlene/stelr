@@ -12,6 +12,8 @@ DATA_FILE = os.environ.get("XML_FILE", "/data/links.xml")
 
 class XmlPlugin(StoragePlugin):
     def __init__(self):
+        self._cache = None
+        self._cache_mtime = None
         self._bootstrap()
 
     def _bootstrap(self):
@@ -40,11 +42,19 @@ class XmlPlugin(StoragePlugin):
                 raise RuntimeError(f"[xml] Invalid XML in '{DATA_FILE}': {e}")
 
     def _load(self) -> ET.Element:
-        return ET.parse(DATA_FILE).getroot()
+        mtime = os.path.getmtime(DATA_FILE)
+        if self._cache is not None and self._cache_mtime == mtime:
+            return self._cache
+        root = ET.parse(DATA_FILE).getroot()
+        self._cache = root
+        self._cache_mtime = mtime
+        return root
 
     def _write(self, root: ET.Element):
         ET.indent(root, space="  ")
         ET.ElementTree(root).write(DATA_FILE, encoding="unicode", xml_declaration=True)
+        self._cache = root
+        self._cache_mtime = os.path.getmtime(DATA_FILE)
 
     # ── Settings ───────────────────────────────────────────────────────────
 
