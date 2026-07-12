@@ -3,6 +3,7 @@ import uuid
 import logging
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 from typing import List, Dict, Any, Optional
 from plugins.base import StoragePlugin
 
@@ -11,24 +12,34 @@ logger = logging.getLogger(__name__)
 
 class PostgresqlPlugin(StoragePlugin):
     def __init__(self):
-        self.host     = os.environ.get("POSTGRES_HOST", "postgres")
-        self.port     = os.environ.get("POSTGRES_PORT", "5432")
-        self.database = os.environ.get("POSTGRES_DB", "stelr")
-        self.user     = os.environ.get("POSTGRES_USER", "stelr")
-        self.password = os.environ.get("POSTGRES_PASSWORD", "stelr")
+        self.host      = os.environ.get("POSTGRES_HOST", "postgres")
+        self.port      = os.environ.get("POSTGRES_PORT", "5432")
+        self.database  = os.environ.get("POSTGRES_DB", "stelr")
+        self.user      = os.environ.get("POSTGRES_USER", "stelr")
+        self.password  = os.environ.get("POSTGRES_PASSWORD", "stelr")
+        self.pool_size = int(os.environ.get("POSTGRES_POOL_SIZE", "10"))
         self._bootstrap()
+        self._pool = psycopg2.pool.ThreadedConnectionPool(1, self.pool_size, self._dsn())
 
     def _dsn(self, database=None):
         db = database or self.database
         return (f"host={self.host} port={self.port} dbname={db} "
                 f"user={self.user} password={self.password}")
 
-    def _conn(self, database=None):
+    def _raw_conn(self, database=None):
         return psycopg2.connect(self._dsn(database))
+
+    def _conn(self):
+        conn = self._pool.getconn()
+        conn.autocommit = True
+        return conn
+
+    def _release_conn(self, conn):
+        self._pool.putconn(conn)
 
     def _bootstrap(self):
         try:
-            conn = self._conn(database="postgres")
+            conn = self._raw_conn(database="postgres")
             conn.autocommit = True
             cur = conn.cursor()
             cur.execute("SELECT 1 FROM pg_catalog.pg_database WHERE datname=%s", (self.database,))
@@ -39,7 +50,7 @@ class PostgresqlPlugin(StoragePlugin):
             raise RuntimeError(f"[postgresql] Could not create database: {e}")
 
         try:
-            conn = self._conn()
+            conn = self._raw_conn()
             cur = conn.cursor()
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -99,7 +110,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur = conn.cursor()
         cur.execute("SELECT value FROM settings WHERE key=%s", (key,))
         row = cur.fetchone()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return row[0] if row else default
 
     def set_setting(self, key: str, value: str):
@@ -107,8 +118,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur = conn.cursor()
         cur.execute("INSERT INTO settings (key, value) VALUES (%s,%s) "
                     "ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value", (key, value))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     # ── Users ──────────────────────────────────────────────────────────────
 
@@ -118,7 +128,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("SELECT id, username, password_hash, is_admin, approved "
                     "FROM users WHERE id=%s AND approved=TRUE", (user_id,))
         row = cur.fetchone()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return dict(row) if row else None
 
     def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
@@ -127,7 +137,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("SELECT id, username, password_hash, is_admin, approved "
                     "FROM users WHERE username=%s AND approved=TRUE", (username,))
         row = cur.fetchone()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return dict(row) if row else None
 
     def create_user(self, username: str, password_hash: str,
@@ -138,8 +148,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("INSERT INTO users (id, username, password_hash, is_admin, approved) "
                     "VALUES (%s,%s,%s,%s,%s)",
                     (user_id, username, password_hash, is_admin, approved))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return user_id
 
     def get_all_users(self) -> List[Dict[str, Any]]:
@@ -148,44 +157,40 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("SELECT id, username, is_admin, approved FROM users "
                     "WHERE approved=TRUE ORDER BY username")
         rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return rows
 
     def delete_user(self, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s", (user_id,))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     def set_password(self, user_id: str, password_hash: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("UPDATE users SET password_hash=%s WHERE id=%s", (password_hash, user_id))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     def get_pending_users(self) -> List[Dict[str, Any]]:
         conn = self._conn()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT id, username FROM users WHERE approved=FALSE ORDER BY username")
         rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return rows
 
     def approve_user(self, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("UPDATE users SET approved=TRUE WHERE id=%s", (user_id,))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     def reject_user(self, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM users WHERE id=%s AND approved=FALSE", (user_id,))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     # ── Links ──────────────────────────────────────────────────────────────
 
@@ -195,7 +200,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("SELECT id, user_id, title, url, rank, group_id FROM links "
                     "WHERE user_id=%s ORDER BY rank", (user_id,))
         rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return rows
 
     def get_all_links_admin(self) -> List[Dict[str, Any]]:
@@ -204,7 +209,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("SELECT l.id, l.user_id, u.username, l.title, l.url, l.rank, l.group_id "
                     "FROM links l JOIN users u ON l.user_id=u.id ORDER BY u.username, l.rank")
         rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return rows
 
     def add(self, link: Dict[str, Any]) -> str:
@@ -215,16 +220,14 @@ class PostgresqlPlugin(StoragePlugin):
                     "VALUES (%s,%s,%s,%s,%s,%s)",
                     (link_id, link["user_id"], link["title"], link["url"],
                      link.get("rank", 0), link.get("group_id") or None))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return link_id
 
     def delete(self, link_id: str, user_id: str):
         conn = self._conn()
         cur = conn.cursor()
         cur.execute("DELETE FROM links WHERE id=%s AND user_id=%s", (link_id, user_id))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     def update(self, link_id: str, link: Dict[str, Any], user_id: str):
         conn = self._conn()
@@ -233,8 +236,7 @@ class PostgresqlPlugin(StoragePlugin):
                     "WHERE id=%s AND user_id=%s",
                     (link["title"], link["url"], link.get("rank", 0),
                      link.get("group_id") or None, link_id, user_id))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     # ── Groups ─────────────────────────────────────────────────────────────
 
@@ -243,7 +245,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT id, user_id, name FROM groups WHERE user_id=%s ORDER BY name", (user_id,))
         rows = [dict(r) for r in cur.fetchall()]
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return rows
 
     def create_group(self, user_id: str, name: str) -> str:
@@ -252,8 +254,7 @@ class PostgresqlPlugin(StoragePlugin):
         group_id = str(uuid.uuid4())
         cur.execute("INSERT INTO groups (id, user_id, name) VALUES (%s,%s,%s)",
                     (group_id, user_id, name))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
         return group_id
 
     def rename_group(self, group_id: str, user_id: str, name: str):
@@ -261,8 +262,7 @@ class PostgresqlPlugin(StoragePlugin):
         cur = conn.cursor()
         cur.execute("UPDATE groups SET name=%s WHERE id=%s AND user_id=%s",
                     (name, group_id, user_id))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)
 
     def delete_group(self, group_id: str, user_id: str):
         conn = self._conn()
@@ -270,5 +270,4 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("DELETE FROM groups WHERE id=%s AND user_id=%s", (group_id, user_id))
         if cur.rowcount:
             cur.execute("UPDATE links SET group_id=NULL WHERE group_id=%s", (group_id,))
-        conn.commit()
-        cur.close(); conn.close()
+        cur.close(); self._release_conn(conn)

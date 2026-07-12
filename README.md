@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v3.5.2**
+**v4.0.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,7 +11,7 @@ and approval.
 
 ## New features and bug fixes
 
-- None
+- Fixed slow add/delete on the MySQL and PostgreSQL backends by pooling database connections instead of opening a new one for every query
 
 ## Features
 
@@ -32,6 +32,7 @@ and approval.
 ## To do
 
 - Update UI to hide URL on mobile devices
+- Add ability to "click to add another entry" for the same "save call"
 
 ---
 
@@ -261,6 +262,7 @@ STORAGE_BACKEND=mysql
 | `MYSQL_USER`     | `stelr` | Username      |
 | `MYSQL_PASSWORD` | `stelr` | Password      |
 | `MYSQL_DATABASE` | `stelr` | Database name |
+| `MYSQL_POOL_SIZE` | `10` | Max pooled connections |
 
 ---
 
@@ -279,6 +281,7 @@ STORAGE_BACKEND=postgresql
 | `POSTGRES_USER`     | `stelr`    | Username      |
 | `POSTGRES_PASSWORD` | `stelr`    | Password      |
 | `POSTGRES_DB`       | `stelr`    | Database name |
+| `POSTGRES_POOL_SIZE`| `10`       | Max pooled connections |
 
 ---
 
