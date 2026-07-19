@@ -34,6 +34,12 @@ and approval.
 
 ---
 
+## To do
+
+- User request - add optional downloadable plugins for major browers to sync bookmarks
+
+---
+
 ## Getting Started
 
 Open **http://localhost:8082** in your browser. You will be presented with the
