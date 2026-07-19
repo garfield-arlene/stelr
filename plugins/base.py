@@ -94,3 +94,21 @@ class StoragePlugin(ABC):
     @abstractmethod
     def delete_group(self, group_id: str, user_id: str) -> None:
         """Delete a group, scoped to user. Its links become ungrouped."""
+
+    # ── API tokens ─────────────────────────────────────────────────────────
+
+    @abstractmethod
+    def create_api_token(self, user_id: str, token_hash: str, name: str) -> str:
+        """Store a new API token (given its hash) for a user and return its generated id."""
+
+    @abstractmethod
+    def get_user_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        """Return the user dict owning this token hash, or None if unknown/revoked."""
+
+    @abstractmethod
+    def get_api_tokens(self, user_id: str) -> List[Dict[str, Any]]:
+        """Return a user's tokens (id + name only, never the hash)."""
+
+    @abstractmethod
+    def revoke_api_token(self, token_id: str, user_id: str) -> None:
+        """Delete a token by id, scoped to owner."""

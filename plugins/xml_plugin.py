@@ -28,12 +28,13 @@ class XmlPlugin(StoragePlugin):
             ET.SubElement(root, "links")
             ET.SubElement(root, "settings")
             ET.SubElement(root, "groups")
+            ET.SubElement(root, "tokens")
             self._write(root)
         else:
             try:
                 root = ET.parse(DATA_FILE).getroot()
                 # Migrate older files
-                for tag in ("users", "links", "settings", "groups"):
+                for tag in ("users", "links", "settings", "groups", "tokens"):
                     if root.find(tag) is None:
                         ET.SubElement(root, tag)
                 self._write(root)
@@ -262,4 +263,38 @@ class XmlPlugin(StoragePlugin):
             for el in root.find("links").findall("link"):
                 if el.findtext("group_id", "") == group_id:
                     el.find("group_id").text = ""
+        self._write(root)
+
+    # ── API tokens ─────────────────────────────────────────────────────────
+
+    def create_api_token(self, user_id: str, token_hash: str, name: str) -> str:
+        root = self._load()
+        token_id = str(uuid.uuid4())
+        el = ET.SubElement(root.find("tokens"), "token", id=token_id)
+        ET.SubElement(el, "user_id").text = user_id
+        ET.SubElement(el, "token_hash").text = token_hash
+        ET.SubElement(el, "name").text = name
+        self._write(root)
+        return token_id
+
+    def get_user_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        root = self._load()
+        for el in root.find("tokens").findall("token"):
+            if el.findtext("token_hash", "") == token_hash:
+                return self.get_user_by_id(el.findtext("user_id", ""))
+        return None
+
+    def get_api_tokens(self, user_id: str) -> List[Dict[str, Any]]:
+        root = self._load()
+        return [{"id": el.get("id"), "name": el.findtext("name", "")}
+                for el in root.find("tokens").findall("token")
+                if el.findtext("user_id", "") == user_id]
+
+    def revoke_api_token(self, token_id: str, user_id: str):
+        root = self._load()
+        tokens_el = root.find("tokens")
+        for el in tokens_el.findall("token"):
+            if el.get("id") == token_id and el.findtext("user_id", "") == user_id:
+                tokens_el.remove(el)
+                break
         self._write(root)

@@ -97,6 +97,14 @@ class PostgresqlPlugin(StoragePlugin):
             """)
             if not cur.fetchone():
                 cur.execute("ALTER TABLE links ADD COLUMN group_id VARCHAR(36)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tokens (
+                    id         VARCHAR(36)  PRIMARY KEY,
+                    user_id    VARCHAR(36)  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    token_hash VARCHAR(64)  NOT NULL UNIQUE,
+                    name       VARCHAR(256) NOT NULL
+                )
+            """)
             conn.commit()
             cur.close(); conn.close()
             logger.info("[postgresql] Tables ready.")
@@ -270,4 +278,37 @@ class PostgresqlPlugin(StoragePlugin):
         cur.execute("DELETE FROM groups WHERE id=%s AND user_id=%s", (group_id, user_id))
         if cur.rowcount:
             cur.execute("UPDATE links SET group_id=NULL WHERE group_id=%s", (group_id,))
+        cur.close(); self._release_conn(conn)
+
+    # ── API tokens ─────────────────────────────────────────────────────────
+
+    def create_api_token(self, user_id: str, token_hash: str, name: str) -> str:
+        conn = self._conn()
+        cur = conn.cursor()
+        token_id = str(uuid.uuid4())
+        cur.execute("INSERT INTO tokens (id, user_id, token_hash, name) VALUES (%s,%s,%s,%s)",
+                    (token_id, user_id, token_hash, name))
+        cur.close(); self._release_conn(conn)
+        return token_id
+
+    def get_user_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM tokens WHERE token_hash=%s", (token_hash,))
+        row = cur.fetchone()
+        cur.close(); self._release_conn(conn)
+        return self.get_user_by_id(row[0]) if row else None
+
+    def get_api_tokens(self, user_id: str) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT id, name FROM tokens WHERE user_id=%s ORDER BY name", (user_id,))
+        rows = [dict(r) for r in cur.fetchall()]
+        cur.close(); self._release_conn(conn)
+        return rows
+
+    def revoke_api_token(self, token_id: str, user_id: str):
+        conn = self._conn()
+        cur = conn.cursor()
+        cur.execute("DELETE FROM tokens WHERE id=%s AND user_id=%s", (token_id, user_id))
         cur.close(); self._release_conn(conn)

@@ -218,6 +218,34 @@
   </div>
 
   <div class="add-panel">
+    <h2>// API Tokens</h2>
+    <form onsubmit="return createApiToken(event)">
+      <div class="group-row">
+        <div>
+          <label>Token Name</label>
+          <input type="text" id="token-name-input" placeholder="e.g. laptop-cli, home-server" required>
+        </div>
+        <div>
+          <button type="submit" class="btn btn-primary">+ Create Token</button>
+        </div>
+      </div>
+    </form>
+    {% if api_tokens %}
+    <ul class="group-list">
+      {% for t in api_tokens %}
+      <li>
+        <span class="group-badge">{{ t.name }}</span>
+        <button type="button" class="btn btn-danger btn-sm"
+                onclick="revokeApiToken('{{ t.id }}')">Revoke</button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty" style="padding:1rem 0">No API tokens yet. Create one for CLI or script access.</div>
+    {% endif %}
+  </div>
+
+  <div class="add-panel">
     <h2>// Filter Links</h2>
     <form method="GET" action="/">
       <input type="hidden" name="sort" value="{{ sort_field }}">
@@ -361,13 +389,28 @@
       <label for="new-pw-input">New Password</label>
       <input type="password" id="new-pw-input" name="new_password" minlength="6" required autocomplete="new-password">
       <label for="new-pw-confirm">Confirm New Password</label>
-      <input type="password" id="new-pw-confirm" minlength="6" required autocomplete="new-password">
+      <input type="password" id="new-pw-confirm" name="confirm_password" minlength="6" required autocomplete="new-password">
       <div class="modal-error" id="change-pw-error" style="display:none">New passwords do not match.</div>
       <div class="modal-actions">
         <button type="button" class="btn btn-secondary btn-sm" onclick="closeChangePasswordModal()">Cancel</button>
         <button type="submit" class="btn btn-warn btn-sm">Change</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ── API token reveal modal ── -->
+<div class="modal-overlay" id="token-reveal-modal" style="display:none">
+  <div class="modal">
+    <h2>// Token Created</h2>
+    <p style="font-size:0.78rem; color:var(--muted); margin-bottom:0.75rem">
+      Copy this token now — it won't be shown again.
+    </p>
+    <input type="text" id="token-reveal-value" readonly onclick="this.select()">
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="copyTokenValue()">Copy</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="closeTokenRevealModal()">Done</button>
+    </div>
   </div>
 </div>
 
@@ -428,6 +471,61 @@
 
   function toggleEdit(id) {
     document.getElementById('edit-' + id).classList.toggle('open');
+  }
+
+  async function createApiToken(event) {
+    event.preventDefault();
+    const nameInput = document.getElementById('token-name-input');
+    const name = nameInput.value.trim();
+    if (!name) return false;
+    try {
+      const res = await fetch('/api/tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to create token.');
+        return false;
+      }
+      showTokenRevealModal(data.token);
+    } catch (e) {
+      alert('Failed to create token.');
+    }
+    return false;
+  }
+
+  function showTokenRevealModal(token) {
+    document.getElementById('token-reveal-value').value = token;
+    document.getElementById('token-reveal-modal').style.display = 'flex';
+  }
+
+  function closeTokenRevealModal() {
+    document.getElementById('token-reveal-modal').style.display = 'none';
+    window.location.reload();
+  }
+
+  function copyTokenValue() {
+    const input = document.getElementById('token-reveal-value');
+    input.select();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(input.value).catch(function() {});
+    }
+  }
+
+  async function revokeApiToken(tokenId) {
+    if (!confirm('Revoke this token? Any tool using it will stop working.')) return;
+    try {
+      const res = await fetch('/api/tokens/' + tokenId, { method: 'DELETE' });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        alert('Failed to revoke token.');
+      }
+    } catch (e) {
+      alert('Failed to revoke token.');
+    }
   }
 
   function renameGroup(groupId, currentName) {

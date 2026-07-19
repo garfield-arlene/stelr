@@ -23,7 +23,7 @@ class YamlPlugin(StoragePlugin):
             os.makedirs(data_dir, exist_ok=True)
         if not os.path.exists(DATA_FILE):
             logger.info(f"[yaml] Creating empty data store '{DATA_FILE}'.")
-            self._write({"users": [], "links": [], "settings": {}, "groups": []})
+            self._write({"users": [], "links": [], "settings": {}, "groups": [], "tokens": []})
         else:
             try:
                 data = self._load()
@@ -31,7 +31,7 @@ class YamlPlugin(StoragePlugin):
                     raise RuntimeError(f"[yaml] '{DATA_FILE}' must be a YAML mapping.")
                 # Migrate older files missing new keys
                 dirty = False
-                for key in ("users", "links", "settings", "groups"):
+                for key in ("users", "links", "settings", "groups", "tokens"):
                     if key not in data:
                         data[key] = [] if key != "settings" else {}
                         dirty = True
@@ -48,11 +48,12 @@ class YamlPlugin(StoragePlugin):
         with open(DATA_FILE, "r") as f:
             data = yaml.safe_load(f)
         if not data:
-            data = {"users": [], "links": [], "settings": {}, "groups": []}
+            data = {"users": [], "links": [], "settings": {}, "groups": [], "tokens": []}
         data.setdefault("users", [])
         data.setdefault("links", [])
         data.setdefault("settings", {})
         data.setdefault("groups", [])
+        data.setdefault("tokens", [])
         self._cache = data
         self._cache_mtime = mtime
         return data
@@ -191,4 +192,29 @@ class YamlPlugin(StoragePlugin):
                 if l.get("group_id") == group_id:
                     l["group_id"] = ""
         data["groups"] = remaining
+        self._write(data)
+
+    # ── API tokens ─────────────────────────────────────────────────────────
+
+    def create_api_token(self, user_id: str, token_hash: str, name: str) -> str:
+        data = self._load()
+        token_id = str(uuid.uuid4())
+        data["tokens"].append({"id": token_id, "user_id": user_id,
+                                "token_hash": token_hash, "name": name})
+        self._write(data)
+        return token_id
+
+    def get_user_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        data = self._load()
+        token = next((t for t in data["tokens"] if t.get("token_hash") == token_hash), None)
+        return self.get_user_by_id(token["user_id"]) if token else None
+
+    def get_api_tokens(self, user_id: str) -> List[Dict[str, Any]]:
+        return [{"id": t["id"], "name": t.get("name", "")}
+                for t in self._load()["tokens"] if t.get("user_id") == user_id]
+
+    def revoke_api_token(self, token_id: str, user_id: str):
+        data = self._load()
+        data["tokens"] = [t for t in data["tokens"]
+                          if not (t.get("id") == token_id and t.get("user_id") == user_id)]
         self._write(data)

@@ -17,6 +17,7 @@ TEMPLATE = """<!DOCTYPE html>
 <script id="stelr-users" type="application/json">[]</script>
 <script id="stelr-settings" type="application/json">{}</script>
 <script id="stelr-groups" type="application/json">[]</script>
+<script id="stelr-tokens" type="application/json">[]</script>
 <ul id="links"></ul>
 </body>
 </html>"""
@@ -49,6 +50,11 @@ class HtmlPlugin(StoragePlugin):
                 tag = soup.new_tag("script", id="stelr-groups", type="application/json")
                 tag.string = "[]"
                 soup.body.insert(2, tag)
+                dirty = True
+            if not soup.find("script", id="stelr-tokens"):
+                tag = soup.new_tag("script", id="stelr-tokens", type="application/json")
+                tag.string = "[]"
+                soup.body.insert(3, tag)
                 dirty = True
             if dirty:
                 self._save(soup)
@@ -264,4 +270,43 @@ class HtmlPlugin(StoragePlugin):
             for li in soup.select(f"li[data-group-id='{group_id}']"):
                 li["data-group-id"] = ""
         self._set_groups(soup, remaining)
+        self._save(soup)
+
+    # ── API tokens ─────────────────────────────────────────────────────────
+
+    def _get_tokens(self, soup: BeautifulSoup) -> List[Dict]:
+        tag = soup.find("script", id="stelr-tokens")
+        return json.loads(tag.string or "[]") if tag else []
+
+    def _set_tokens(self, soup: BeautifulSoup, tokens: List[Dict]):
+        tag = soup.find("script", id="stelr-tokens")
+        if not tag:
+            tag = soup.new_tag("script", id="stelr-tokens", type="application/json")
+            soup.body.insert(0, tag)
+        tag.string = json.dumps(tokens)
+
+    def create_api_token(self, user_id: str, token_hash: str, name: str) -> str:
+        soup = self._load()
+        tokens = self._get_tokens(soup)
+        token_id = str(uuid.uuid4())
+        tokens.append({"id": token_id, "user_id": user_id,
+                        "token_hash": token_hash, "name": name})
+        self._set_tokens(soup, tokens)
+        self._save(soup)
+        return token_id
+
+    def get_user_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        token = next((t for t in self._get_tokens(self._load())
+                      if t.get("token_hash") == token_hash), None)
+        return self.get_user_by_id(token["user_id"]) if token else None
+
+    def get_api_tokens(self, user_id: str) -> List[Dict[str, Any]]:
+        return [{"id": t["id"], "name": t.get("name", "")}
+                for t in self._get_tokens(self._load()) if t.get("user_id") == user_id]
+
+    def revoke_api_token(self, token_id: str, user_id: str):
+        soup = self._load()
+        tokens = self._get_tokens(soup)
+        self._set_tokens(soup, [t for t in tokens
+                                if not (t.get("id") == token_id and t.get("user_id") == user_id)])
         self._save(soup)
