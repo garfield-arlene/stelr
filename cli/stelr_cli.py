@@ -6,6 +6,7 @@ import getpass
 import json
 import os
 import sys
+from urllib.parse import urlparse
 
 import requests
 
@@ -59,8 +60,18 @@ def _error(resp):
         return resp.text
 
 
+def _warn_if_insecure(server):
+    parsed = urlparse(server)
+    if parsed.scheme == "http" and parsed.hostname not in ("localhost", "127.0.0.1", "::1"):
+        print(f"Warning: {server} uses plain HTTP, not HTTPS — your username, password, "
+              "and API token will be sent unencrypted and can be read by anyone on the "
+              "network path. Use an https:// URL unless this server really is your own "
+              "machine.", file=sys.stderr)
+
+
 def cmd_login(args):
     server = args.server.rstrip("/")
+    _warn_if_insecure(server)
     username = input("Username: ")
     password = getpass.getpass("Password: ")
     name = args.name or f"cli-{os.uname().nodename if hasattr(os, 'uname') else 'device'}"
