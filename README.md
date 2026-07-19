@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v4.2.0**
+**v5.0.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,10 +11,9 @@ and approval.
 
 ## New features and bug fixes
 
-- Fixed slow add/delete on the MySQL and PostgreSQL backends by pooling database connections instead of opening a new one for every query
-- Toggle the URL column on and off — sorting and filtering by URL still work while it's hidden
-- Mobile-friendly layout — the Group column now collapses on narrow screens instead of the app requiring horizontal scrolling
-- Add several links in one go: click "+ Add Another Entry" to queue up more rows before saving
+- API tokens: generate personal access tokens (Account panel) for use outside the browser
+- Full JSON API for links and groups (create/read/update/delete), authenticated by token or session
+- Official CLI tool (`cli/stelr_cli.py`) for managing your bookmarks from the command line
 
 ## Features
 
@@ -36,7 +35,10 @@ and approval.
 
 ## To do
 
-- User request - add optional downloadable plugins for major browers to sync bookmarks
+- User requests
+  - Build downloadable browser plugins for major browsers to optionally sync bookmarks
+  - Create store accounts for Chrome, Mozilla, and Edge
+  - Upload extensions to their respective stores
 
 ---
 
@@ -122,6 +124,14 @@ for your links. When adding or editing a link, pick a group from the
 **Group** dropdown, or leave it as "No Group". Deleting a group does not
 delete its links — they simply become ungrouped.
 
+### Managing API tokens
+Use the **API Tokens** panel to create personal access tokens for the [REST
+API](#rest-api) and [CLI tool](#cli-tool) — useful for scripts, browser
+extensions, or anything outside the browser session. Give the token a name
+(e.g. `laptop-cli`) and click **+ Create Token**; the raw token is shown once
+in a popup, so copy it immediately — Stelr only stores a hash of it and can't
+show it again. Click **Revoke** on a token to invalidate it immediately.
+
 ---
 
 ## Admin Panel
@@ -160,48 +170,101 @@ title, URL, and rank.
 
 ## REST API
 
-Stelr exposes a small JSON API for reading your own links programmatically.
-There's no separate API token — authentication reuses the same session
-cookie as the web UI, so a client needs to log in first and carry that
-cookie on subsequent requests.
+Stelr exposes a full JSON API for managing your own links, groups, and
+tokens programmatically — the same API the CLI tool and web UI's own token
+panel use. Two auth methods are supported:
 
-| Endpoint      | Method | Auth required | Description                                      |
-|---------------|--------|----------------|---------------------------------------------------|
-| `/login`      | POST   | No             | Authenticate; sets the session cookie             |
-| `/api/links`  | GET    | Yes            | Returns your links as JSON, sorted by rank        |
-| `/health`     | GET    | No             | Returns app status, version, and active backend   |
+- **API token** — an `Authorization: Bearer <token>` header. This is what
+  scripts, the CLI, and future browser extensions should use. Create tokens
+  from the [API Tokens panel](#managing-api-tokens) or via `POST /api/tokens`.
+- **Session cookie** — the same cookie the web UI uses after `/login`. Handy
+  for quick `curl` testing without generating a token.
 
-### Authenticating
+| Endpoint                  | Method | Auth required | Description                                    |
+|----------------------------|--------|----------------|-------------------------------------------------|
+| `/login`                   | POST   | No             | Web UI login; sets the session cookie          |
+| `/api/tokens`               | POST   | No\*           | Create a token (bootstrap with username/password, or mint one for the current session) |
+| `/api/tokens`               | GET    | Yes            | List your tokens (id + name only)              |
+| `/api/tokens/<id>`           | DELETE | Yes            | Revoke a token                                 |
+| `/api/links`                | GET    | Yes            | List your links (supports the same `q`, `rank_op`, `rank_val`, `group`, `sort`, `dir` params as the web UI's filter/sort) |
+| `/api/links`                | POST   | Yes            | Create a link                                  |
+| `/api/links/<id>`           | GET    | Yes            | Get a single link                              |
+| `/api/links/<id>`           | PUT    | Yes            | Update a link (partial — omitted fields are unchanged) |
+| `/api/links/<id>`           | DELETE | Yes            | Delete a link                                  |
+| `/api/groups`               | GET    | Yes            | List your groups                               |
+| `/api/groups`               | POST   | Yes            | Create a group                                 |
+| `/api/groups/<id>`           | PUT    | Yes            | Rename a group                                 |
+| `/api/groups/<id>`           | DELETE | Yes            | Delete a group (its links become ungrouped)    |
+| `/health`                   | GET    | No             | Returns app status, version, and active backend |
 
-Log in with a cookie jar so the session persists across requests:
+\* `POST /api/tokens` needs either a `username`/`password` in the body, or an
+existing session cookie — see below.
+
+### Getting a token
+
+From a script or a fresh machine, exchange your username and password for a
+token once:
 
 ```bash
-curl -c cookies.txt -X POST http://localhost:8082/login \
-  -d "username=myuser" -d "password=mypassword"
+curl -X POST http://localhost:8082/api/tokens \
+  -H "Content-Type: application/json" \
+  -d '{"username": "myuser", "password": "mypassword", "name": "my-script"}'
 ```
-
-### Fetching your links
-
-```bash
-curl -b cookies.txt http://localhost:8082/api/links
-```
-
-Example response:
 
 ```json
-[
-  {
-    "id": "b6b9c2b0-3f1a-4e2c-9a1d-8f3e2c1d0a9b",
-    "user_id": "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d",
-    "title": "GitHub",
-    "url": "https://github.com",
-    "rank": 1,
-    "group_id": ""
-  }
-]
+{"id": "9c6d...", "name": "my-script", "token": "stelr_AbCd...xyz"}
+```
+
+The `token` value is only ever returned at creation time — store it
+somewhere safe (an env var, a secrets manager, the CLI's local config).
+Use it as a Bearer token on every subsequent request:
+
+```bash
+curl -H "Authorization: Bearer stelr_AbCd...xyz" http://localhost:8082/api/links
+```
+
+### Managing links
+
+```bash
+# Create
+curl -X POST http://localhost:8082/api/links \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"title": "GitHub", "url": "https://github.com", "rank": 1}'
+
+# List (with the web UI's filter/sort params)
+curl -H "Authorization: Bearer $TOKEN" "http://localhost:8082/api/links?q=github&sort=title"
+
+# Update just the rank
+curl -X PUT http://localhost:8082/api/links/<id> \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"rank": 5}'
+
+# Delete
+curl -X DELETE http://localhost:8082/api/links/<id> -H "Authorization: Bearer $TOKEN"
+```
+
+A link looks like:
+
+```json
+{
+  "id": "b6b9c2b0-3f1a-4e2c-9a1d-8f3e2c1d0a9b",
+  "user_id": "1a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c8d",
+  "title": "GitHub",
+  "url": "https://github.com",
+  "rank": 1,
+  "group_id": ""
+}
 ```
 
 `group_id` is an empty string when a link isn't assigned to a group.
+
+### Managing groups
+
+```bash
+curl -X POST http://localhost:8082/api/groups \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"name": "Work"}'
+```
 
 ### Health check
 
@@ -215,6 +278,40 @@ curl http://localhost:8082/health
 ```json
 {"status": "ok", "version": "<version>", "backend": "xml"}
 ```
+
+---
+
+## CLI Tool
+
+`cli/stelr_cli.py` is a standalone command-line client for the REST API —
+useful for scripting, bulk imports, or managing your links without opening a
+browser.
+
+```bash
+cd cli
+pip install -r requirements.txt
+
+python3 stelr_cli.py login http://localhost:8082    # prompts for username/password
+python3 stelr_cli.py whoami
+
+python3 stelr_cli.py add "GitHub" "https://github.com" --rank 1 --group Work
+python3 stelr_cli.py list
+python3 stelr_cli.py list --filter github --sort title
+python3 stelr_cli.py update <id> --rank 5
+python3 stelr_cli.py delete <id>
+
+python3 stelr_cli.py groups
+python3 stelr_cli.py group-create Work
+python3 stelr_cli.py group-delete Work
+
+python3 stelr_cli.py tokens
+python3 stelr_cli.py logout
+```
+
+`login` stores the issued token in `~/.stelr/config.json` (mode `0600`); every
+other command reads it from there. `logout` revokes that token on the server
+and clears the local file. Add `-y`/`--yes` to `delete`/`group-delete` to
+skip the confirmation prompt in scripts.
 
 ---
 

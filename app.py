@@ -1,11 +1,14 @@
 import os
 import sys
+import secrets
+import hashlib
 import importlib
 import logging
 import bcrypt
+from functools import wraps
 from datetime import timedelta
 from flask import (Flask, render_template, request, redirect,
-                   url_for, jsonify, flash, session)
+                   url_for, jsonify, flash, session, g)
 from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
 
@@ -16,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "4.2.0"
+APP_VERSION = "5.0.0"
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -209,6 +212,7 @@ def index():
     links  = storage.get_all(current_user.id)
     groups = storage.get_groups(current_user.id)
     group_map = {g["id"]: g["name"] for g in groups}
+    api_tokens = storage.get_api_tokens(current_user.id)
 
     query        = request.args.get("q", "").strip()
     rank_op      = request.args.get("rank_op", "").strip()
@@ -226,6 +230,7 @@ def index():
     links = sort_links(links, sort_field, sort_dir)
 
     return render_template("index.html", links=links, groups=groups, group_map=group_map,
+                           api_tokens=api_tokens,
                            backend=STORAGE_BACKEND, version=APP_VERSION, app_name=APP_NAME,
                            timeout=SESSION_TIMEOUT_MINUTES,
                            filter_q=query, filter_rank_op=rank_op, filter_rank_val=rank_val,
@@ -464,15 +469,215 @@ def admin_toggle_registration():
     return redirect(url_for("admin"))
 
 
-# ── API & health ───────────────────────────────────────────────────────────
+# ── API auth helpers ───────────────────────────────────────────────────────
 
-@app.route("/api/links")
-@login_required
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _request_data():
+    """Return the request body as a dict, whether sent as JSON or form-encoded."""
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form
+
+
+def api_auth_required(f):
+    """Accept either a Bearer API token or an existing session cookie."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+            user_data = get_storage().get_user_by_token_hash(_hash_token(token))
+            if not user_data:
+                return jsonify({"error": "Invalid or revoked API token"}), 401
+            g.api_user_id = user_data["id"]
+            return f(*args, **kwargs)
+        if current_user.is_authenticated:
+            g.api_user_id = current_user.id
+            return f(*args, **kwargs)
+        return jsonify({"error": "Authentication required"}), 401
+    return wrapper
+
+
+def _get_link_for_user(storage, user_id, link_id):
+    return next((l for l in storage.get_all(user_id) if l["id"] == link_id), None)
+
+
+# ── API tokens ─────────────────────────────────────────────────────────────
+
+@app.route("/api/tokens", methods=["POST"])
+def api_create_token():
+    """Bootstrap a token from username/password (for CLI login), or mint an
+    additional token for an already session-authenticated browser user."""
+    data = _request_data()
+    name = (data.get("name") or "unnamed").strip() or "unnamed"
+
+    if current_user.is_authenticated and not data.get("username"):
+        user_id = current_user.id
+    else:
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
+        if not username or not password:
+            return jsonify({"error": "username and password are required"}), 400
+        storage = get_storage()
+        user_data = storage.get_user_by_username(username)
+        if not user_data or not bcrypt.checkpw(password.encode(),
+                                                user_data["password_hash"].encode()):
+            return jsonify({"error": "Invalid username or password"}), 401
+        user_id = user_data["id"]
+
+    raw_token = "stelr_" + secrets.token_urlsafe(32)
+    token_id = get_storage().create_api_token(user_id, _hash_token(raw_token), name)
+    return jsonify({"id": token_id, "name": name, "token": raw_token}), 201
+
+
+@app.route("/api/tokens", methods=["GET"])
+@api_auth_required
+def api_list_tokens():
+    return jsonify(get_storage().get_api_tokens(g.api_user_id))
+
+
+@app.route("/api/tokens/<token_id>", methods=["DELETE"])
+@api_auth_required
+def api_revoke_token(token_id):
+    get_storage().revoke_api_token(token_id, g.api_user_id)
+    return jsonify({"status": "revoked"})
+
+
+# ── API links ──────────────────────────────────────────────────────────────
+
+@app.route("/api/links", methods=["GET"])
+@api_auth_required
 def api_links():
-    links = get_storage().get_all(current_user.id)
-    links.sort(key=lambda x: x.get("rank", 0))
+    links = get_storage().get_all(g.api_user_id)
+
+    query        = request.args.get("q", "").strip()
+    rank_op      = request.args.get("rank_op", "").strip()
+    rank_val     = request.args.get("rank_val", "").strip()
+    group_filter = request.args.get("group", "").strip()
+    sort_field   = request.args.get("sort", "rank").strip()
+    sort_dir     = request.args.get("dir", "asc").strip()
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "asc"
+    if sort_field not in SORT_FIELDS:
+        sort_field = "rank"
+
+    links = filter_links(links, query, rank_op, rank_val)
+    links = filter_by_group(links, group_filter)
+    links = sort_links(links, sort_field, sort_dir)
     return jsonify(links)
 
+
+@app.route("/api/links", methods=["POST"])
+@api_auth_required
+def api_create_link():
+    data = _request_data()
+    title = (data.get("title") or "").strip()
+    url = (data.get("url") or "").strip()
+    if not title or not url:
+        return jsonify({"error": "title and url are required"}), 400
+    try:
+        rank = int(data.get("rank") or 0)
+    except (TypeError, ValueError):
+        rank = 0
+    storage = get_storage()
+    group_id = resolve_group_id(storage, g.api_user_id, str(data.get("group_id") or "").strip())
+    link_id = storage.add({"user_id": g.api_user_id, "title": title, "url": url,
+                           "rank": rank, "group_id": group_id})
+    return jsonify(_get_link_for_user(storage, g.api_user_id, link_id)), 201
+
+
+@app.route("/api/links/<link_id>", methods=["GET"])
+@api_auth_required
+def api_get_link(link_id):
+    link = _get_link_for_user(get_storage(), g.api_user_id, link_id)
+    if not link:
+        return jsonify({"error": "Link not found"}), 404
+    return jsonify(link)
+
+
+@app.route("/api/links/<link_id>", methods=["PUT"])
+@api_auth_required
+def api_update_link(link_id):
+    storage = get_storage()
+    existing = _get_link_for_user(storage, g.api_user_id, link_id)
+    if not existing:
+        return jsonify({"error": "Link not found"}), 404
+    data = _request_data()
+
+    title = data.get("title")
+    title = title.strip() if title is not None else existing["title"]
+    url = data.get("url")
+    url = url.strip() if url is not None else existing["url"]
+    if not title or not url:
+        return jsonify({"error": "title and url cannot be empty"}), 400
+
+    rank = data.get("rank")
+    if rank is not None:
+        try:
+            rank = int(rank)
+        except (TypeError, ValueError):
+            rank = existing["rank"]
+    else:
+        rank = existing["rank"]
+
+    group_id = data.get("group_id")
+    group_id = (resolve_group_id(storage, g.api_user_id, str(group_id).strip())
+               if group_id is not None else existing.get("group_id", ""))
+
+    storage.update(link_id, {"title": title, "url": url, "rank": rank, "group_id": group_id},
+                    g.api_user_id)
+    return jsonify(_get_link_for_user(storage, g.api_user_id, link_id))
+
+
+@app.route("/api/links/<link_id>", methods=["DELETE"])
+@api_auth_required
+def api_delete_link(link_id):
+    storage = get_storage()
+    if not _get_link_for_user(storage, g.api_user_id, link_id):
+        return jsonify({"error": "Link not found"}), 404
+    storage.delete(link_id, g.api_user_id)
+    return jsonify({"status": "deleted"})
+
+
+# ── API groups ─────────────────────────────────────────────────────────────
+
+@app.route("/api/groups", methods=["GET"])
+@api_auth_required
+def api_groups():
+    return jsonify(get_storage().get_groups(g.api_user_id))
+
+
+@app.route("/api/groups", methods=["POST"])
+@api_auth_required
+def api_create_group():
+    name = (_request_data().get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    group_id = get_storage().create_group(g.api_user_id, name)
+    return jsonify({"id": group_id, "user_id": g.api_user_id, "name": name}), 201
+
+
+@app.route("/api/groups/<group_id>", methods=["PUT"])
+@api_auth_required
+def api_rename_group(group_id):
+    name = (_request_data().get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name is required"}), 400
+    get_storage().rename_group(group_id, g.api_user_id, name)
+    return jsonify({"id": group_id, "user_id": g.api_user_id, "name": name})
+
+
+@app.route("/api/groups/<group_id>", methods=["DELETE"])
+@api_auth_required
+def api_delete_group(group_id):
+    get_storage().delete_group(group_id, g.api_user_id)
+    return jsonify({"status": "deleted"})
+
+
+# ── Health ─────────────────────────────────────────────────────────────────
 
 @app.route("/health")
 def health():
