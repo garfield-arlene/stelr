@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v4.1.1**
+**v4.2.0**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -12,6 +12,9 @@ and approval.
 ## New features and bug fixes
 
 - Fixed slow add/delete on the MySQL and PostgreSQL backends by pooling database connections instead of opening a new one for every query
+- Toggle the URL column on and off — sorting and filtering by URL still work while it's hidden
+- Mobile-friendly layout — the Group column now collapses on narrow screens instead of the app requiring horizontal scrolling
+- Add several links in one go: click "+ Add Another Entry" to queue up more rows before saving
 
 ## Features
 
@@ -29,10 +32,11 @@ and approval.
 - Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
 - Group links into folders, and sort entries by clicking a column header
 
+---
+
 ## To do
 
-- Update UI to hide URL on mobile devices
-- Add ability to "click to add another entry" for the same "save call"
+- User request - add optional downloadable plugins for major browers to sync bookmarks
 
 ---
 
@@ -75,8 +79,10 @@ Dashboard
 
 ### Adding a link
 Fill in the **Title**, **URL**, and **Rank** fields at the top of the page and
-click **Add**. Rank is a number — lower numbers appear first. You can use any
-numbering scheme you like (1, 2, 3 or 10, 20, 30, etc.).
+click **Save**. Rank is a number — lower numbers appear first. You can use any
+numbering scheme you like (1, 2, 3 or 10, 20, 30, etc.). Click **+ Add Another
+Entry** before saving to queue up more rows and add several links at once —
+empty extra rows are ignored, so you don't have to fill in every one you add.
 
 Dashboard
 ![Stelr Dashboard](screenshots/Stelr_Interface_Dashboard_2026-04-13.png)
@@ -103,6 +109,12 @@ be combined. Click **Clear** to reset.
 Click any of the **Rank**, **Title**, or **URL** column headers to sort the
 table by that column. Clicking the same header again reverses the direction;
 an arrow next to the header shows the current sort field and direction.
+
+### Showing or hiding the URL column
+Click **Hide URL** above the table to declutter the view — sorting and
+filtering by URL still work while the column is hidden, they just don't need
+it to be visible on screen. Your preference is remembered on that device. On
+narrow/mobile screens the URL column is hidden by default.
 
 ### Organizing links into groups
 Use the **Manage Groups** panel to create, rename, or delete groups (folders)

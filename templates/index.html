@@ -16,7 +16,7 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
     header { border-bottom: 1px solid var(--border); padding: 1.2rem 2rem;
-             display: flex; align-items: center; gap: 1rem;
+             display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
              position: sticky; top: 0; background: rgba(13,15,18,0.95);
              backdrop-filter: blur(8px); z-index: 100; }
     .logo { font-family: var(--mono); font-size: 1.3rem; color: var(--accent); letter-spacing: 4px; }
@@ -78,7 +78,11 @@
                     padding: 2px 8px; display: inline-block; }
     th a.sort-link { color: inherit; text-decoration: none; }
     th a.sort-link:hover { color: var(--accent); }
-    @media (max-width: 700px) { .filter-row { grid-template-columns: 1fr; } }
+    @media (max-width: 700px) { .filter-row, .group-row { grid-template-columns: 1fr; } }
+    .entry-row + .entry-row { margin-top: 0.75rem; }
+    .add-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
+    .table-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+    table.hide-url .url-col, table.hide-url .link-url { display: none; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
                       display: flex; align-items: center; justify-content: center; z-index: 200; }
     .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
@@ -115,7 +119,8 @@
     .empty .big { font-size: 2.5rem; margin-bottom: 1rem; }
     @media (max-width: 700px) {
       .form-row, .edit-form-inner { grid-template-columns: 1fr; }
-      th:nth-child(2), td:nth-child(2) { display: none; }
+      th:nth-child(4), td:nth-child(4) { display: none; }
+      .container { padding: 1rem; }
     }
   </style>
 </head>
@@ -147,32 +152,35 @@
   <div class="add-panel">
     <h2>// Add New Link</h2>
     <form method="POST" action="/add">
-      <div class="form-row">
-        <div>
-          <label>Title</label>
-          <input type="text" name="title" placeholder="My Favourite Site" required>
+      <div id="add-entries">
+        <div class="form-row entry-row">
+          <div>
+            <label>Title</label>
+            <input type="text" name="title" placeholder="My Favourite Site" required>
+          </div>
+          <div>
+            <label>URL</label>
+            <input type="url" name="url" placeholder="https://example.com" required>
+          </div>
+          <div>
+            <label>Rank</label>
+            <input type="number" name="rank" value="0" min="0">
+          </div>
+          <div>
+            <label>Group</label>
+            <select name="group_id">
+              <option value="">No Group</option>
+              {% for g in groups %}
+              <option value="{{ g.id }}">{{ g.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div></div>
         </div>
-        <div>
-          <label>URL</label>
-          <input type="url" name="url" placeholder="https://example.com" required>
-        </div>
-        <div>
-          <label>Rank</label>
-          <input type="number" name="rank" value="0" min="0">
-        </div>
-        <div>
-          <label>Group</label>
-          <select name="group_id">
-            <option value="">No Group</option>
-            {% for g in groups %}
-            <option value="{{ g.id }}">{{ g.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <button type="submit" class="btn btn-primary">+ ADD</button>
-        </div>
+      </div>
+      <div class="add-actions">
+        <button type="button" class="btn btn-secondary" onclick="addAnotherEntryRow()">+ Add Another Entry</button>
+        <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
   </div>
@@ -262,13 +270,16 @@
   {%- endmacro %}
 
   {% if links %}
+  <div class="table-toolbar">
+    <button type="button" class="btn btn-secondary btn-sm" id="url-toggle-btn" onclick="toggleUrlColumn()">Hide URL</button>
+  </div>
   <div class="table-wrap">
-    <table>
+    <table id="links-table">
       <thead>
         <tr>
           <th>{{ sort_header('rank', 'Rank') }}</th>
           <th>{{ sort_header('title', 'Title') }}</th>
-          <th>{{ sort_header('url', 'URL') }}</th>
+          <th class="url-col">{{ sort_header('url', 'URL') }}</th>
           <th>Group</th>
           <th>Actions</th>
         </tr>
@@ -361,6 +372,60 @@
 </div>
 
 <script>
+  const GROUPS = {{ groups | tojson }};
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function groupOptionsHtml() {
+    let html = '<option value="">No Group</option>';
+    GROUPS.forEach(function(g) {
+      html += '<option value="' + escHtml(g.id) + '">' + escHtml(g.name) + '</option>';
+    });
+    return html;
+  }
+
+  function addAnotherEntryRow() {
+    const container = document.getElementById('add-entries');
+    const row = document.createElement('div');
+    row.className = 'form-row entry-row';
+    row.innerHTML =
+      '<div><label>Title</label><input type="text" name="title" placeholder="My Favourite Site"></div>' +
+      '<div><label>URL</label><input type="url" name="url" placeholder="https://example.com"></div>' +
+      '<div><label>Rank</label><input type="number" name="rank" value="0" min="0"></div>' +
+      '<div><label>Group</label><select name="group_id">' + groupOptionsHtml() + '</select></div>' +
+      '<div><label>&nbsp;</label><button type="button" class="btn btn-danger btn-sm" onclick="this.closest(\'.entry-row\').remove()">✕ Remove</button></div>';
+    container.appendChild(row);
+    row.querySelector('input[name="title"]').focus();
+  }
+
+  function toggleUrlColumn() {
+    const table = document.getElementById('links-table');
+    const btn = document.getElementById('url-toggle-btn');
+    if (!table) return;
+    const hidden = table.classList.toggle('hide-url');
+    btn.textContent = hidden ? 'Show URL' : 'Hide URL';
+    localStorage.setItem('stelr_hide_url', hidden ? '1' : '0');
+  }
+
+  (function initUrlColumn() {
+    const saved = localStorage.getItem('stelr_hide_url');
+    const hideByDefault = saved !== null ? saved === '1' : window.matchMedia('(max-width: 700px)').matches;
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!hideByDefault) return;
+      const table = document.getElementById('links-table');
+      const btn = document.getElementById('url-toggle-btn');
+      if (!table) return;
+      table.classList.add('hide-url');
+      btn.textContent = 'Show URL';
+    });
+  })();
+
   function toggleEdit(id) {
     document.getElementById('edit-' + id).classList.toggle('open');
   }
