@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v5.0.1**
+**v5.0.2**
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -14,6 +14,7 @@ and approval.
 - API tokens: generate personal access tokens (Account panel) for use outside the browser
 - Full JSON API for links and groups (create/read/update/delete), authenticated by token or session
 - Official CLI tool (`cli/stelr_cli.py`) for managing your bookmarks from the command line
+- Fixed Change Password always failing silently — the new password was never actually saved, so it stopped working after logout
 
 ## Features
 
