@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "4.1.1"
+APP_VERSION = "4.2.0"
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -235,22 +235,33 @@ def index():
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
-    title    = request.form.get("title", "").strip()
-    url      = request.form.get("url", "").strip()
-    rank     = request.form.get("rank", "0").strip()
-    group_id = request.form.get("group_id", "").strip()
-    if not title or not url:
-        flash("Title and URL are required.", "error")
-        return redirect(url_for("index"))
-    try:
-        rank = int(rank)
-    except ValueError:
-        rank = 0
+    titles    = request.form.getlist("title")
+    urls      = request.form.getlist("url")
+    ranks     = request.form.getlist("rank")
+    group_ids = request.form.getlist("group_id")
+
     storage = get_storage()
-    group_id = resolve_group_id(storage, current_user.id, group_id)
-    storage.add({"user_id": current_user.id, "title": title,
-                 "url": url, "rank": rank, "group_id": group_id})
-    flash(f"'{title}' added!", "success")
+    added = 0
+    for title, url, rank, group_id in zip(titles, urls, ranks, group_ids):
+        title = title.strip()
+        url = url.strip()
+        if not title or not url:
+            continue
+        try:
+            rank = int(rank)
+        except ValueError:
+            rank = 0
+        group_id = resolve_group_id(storage, current_user.id, group_id.strip())
+        storage.add({"user_id": current_user.id, "title": title,
+                     "url": url, "rank": rank, "group_id": group_id})
+        added += 1
+
+    if added == 0:
+        flash("Title and URL are required.", "error")
+    elif added == 1:
+        flash("Link added!", "success")
+    else:
+        flash(f"{added} links added!", "success")
     return redirect(url_for("index"))
 
 
