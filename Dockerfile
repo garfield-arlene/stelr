@@ -22,6 +22,7 @@ COPY app.py .
 COPY entrypoint.sh .
 COPY plugins/ plugins/
 COPY templates/ templates/
+COPY static/ static/
 
 RUN mkdir -p /data
 RUN chmod +x /app/entrypoint.sh
