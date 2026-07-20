@@ -24,12 +24,11 @@
   },
   "permissions": ["storage", "bookmarks", "activeTab", "alarms"],
   "optional_host_permissions": ["*://*/*"],
-  "optional_permissions": ["*://*/*"],
   "minimum_chrome_version": "102",
   "browser_specific_settings": {
     "gecko": {
       "id": "stelr-bookmark-sync@stelr.app",
-      "strict_min_version": "109.0",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
         "required": ["authenticationInfo", "bookmarksInfo"]
       }

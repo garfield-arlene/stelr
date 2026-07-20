@@ -64,10 +64,17 @@ rather than duplicated.
 
 - Manifest V3, using the promise-based `browser.*` API (via Mozilla's
   official `webextension-polyfill`, vendored in `lib/browser-polyfill.js`),
-  so the same code runs unmodified on Chrome, Edge, and Firefox 109+. The
-  manifest declares both `background.service_worker` (Chrome/Edge/modern
-  Firefox) and `background.scripts` (older Firefox MV3) plus a
-  `browser_specific_settings.gecko.id`, all needed for Firefox to load it.
+  so the same code runs unmodified on Chrome, Edge, and Firefox 140+. The
+  manifest declares both `background.service_worker` (Chrome/Edge) and
+  `background.scripts` (Firefox) plus a `browser_specific_settings.gecko.id`,
+  all needed for Firefox to load it. The Firefox minimum is 140, not the
+  MV3-baseline 109, because `data_collection_permissions` (required for AMO
+  submission) needs 140; `optional_host_permissions`, `options_page`, and
+  `background.type` all need lower versions, so 140 is the binding floor.
+- Not published for Firefox for Android: it has no `browser.bookmarks` API,
+  which this extension depends on even outside of sync (e.g. the settings
+  page lists folders on load), so `browser_specific_settings.gecko_android`
+  is deliberately omitted.
 - No host permissions are requested upfront. The extension asks for access
   to your specific server only, at login time.
 - **Firefox and private-network servers**: if your Stelr instance is on a
