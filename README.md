@@ -11,9 +11,9 @@ and approval.
 
 ## New features and bug fixes
 
-- Official browser extension (`browser-extension/`) for Chrome, Edge, and Firefox — save the current page, sync a bookmark folder, or sync your whole bookmark tree to Stelr
-- Two-way sync and deletion propagation options for the browser extension — pull Stelr-only links into your bookmarks, and keep deletions on either side in sync
-- New app icon and favicon, on the web app and browser extension
+- Browser extension: required opt-in warning before connecting to a plain-HTTP, non-localhost Stelr server, since credentials and the API token would otherwise cross the network unencrypted
+- Fixed the browser extension failing to request server permissions on Firefox versions before 128
+- Browser extension: clearer error messages when the server can't be reached, including guidance for Firefox's Local Network Access protection blocking self-hosted servers on a local network
 
 ## Features
 

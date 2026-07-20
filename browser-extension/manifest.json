@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stelr Bookmark Sync",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Save the current page or sync your browser bookmarks to a self-hosted Stelr instance.",
   "icons": {
     "16": "icons/icon16.png",
@@ -24,6 +24,7 @@
   },
   "permissions": ["storage", "bookmarks", "activeTab", "alarms"],
   "optional_host_permissions": ["*://*/*"],
+  "optional_permissions": ["*://*/*"],
   "minimum_chrome_version": "102",
   "browser_specific_settings": {
     "gecko": {

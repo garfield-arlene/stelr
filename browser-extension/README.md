@@ -28,6 +28,10 @@ Stelr) by default, with optional two-way sync and deletion propagation.
    stored.
 3. The browser will ask permission to let the extension talk to that
    specific server (nothing broader). Allow it.
+4. If your server address uses plain `http://` and isn't `localhost`, the
+   extension warns you before connecting — your username, password, and API
+   token would otherwise cross the network unencrypted. Only continue if you
+   trust the network path (e.g. your own LAN).
 
 ## Using it
 
@@ -66,3 +70,13 @@ rather than duplicated.
   `browser_specific_settings.gecko.id`, all needed for Firefox to load it.
 - No host permissions are requested upfront. The extension asks for access
   to your specific server only, at login time.
+- **Firefox and private-network servers**: if your Stelr instance is on a
+  plain-HTTP LAN address (e.g. `http://192.168.x.x:5000`, a typical
+  self-hosted setup) and login fails with "NetworkError when attempting to
+  fetch resource," this is usually Firefox's **Local Network Access**
+  protection (rolling out by default from Firefox 151 on) blocking the
+  connection — it requires its own native permission prompt, separate from
+  the extension's host-permission prompt. Look for that prompt, or check
+  Firefox Settings → Privacy & Security → Permissions → Local Network Access.
+  This is a browser-level restriction the extension can't bypass; serving
+  Stelr over HTTPS avoids it.

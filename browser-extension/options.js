@@ -13,6 +13,10 @@ const els = {
   loginBtn: document.getElementById("login-btn"),
   logoutBtn: document.getElementById("logout-btn"),
   loginStatus: document.getElementById("login-status"),
+  insecureWarning: document.getElementById("insecure-warning"),
+  insecureAckInput: document.getElementById("insecure-ack-input"),
+  insecureContinueBtn: document.getElementById("insecure-continue-btn"),
+  insecureCancelBtn: document.getElementById("insecure-cancel-btn"),
   syncPanel: document.getElementById("sync-panel"),
   folderRow: document.getElementById("folder-row"),
   folderSelect: document.getElementById("folder-select"),
@@ -75,7 +79,13 @@ async function render() {
   }
 }
 
-els.loginBtn.addEventListener("click", async () => {
+function hideInsecureWarning() {
+  els.insecureWarning.classList.remove("visible");
+  els.insecureAckInput.checked = false;
+  els.insecureContinueBtn.disabled = true;
+}
+
+async function doLogin() {
   setStatus(els.loginStatus, "Logging in…", "");
   try {
     await api.login(
@@ -86,10 +96,42 @@ els.loginBtn.addEventListener("click", async () => {
     );
     els.passwordInput.value = "";
     setStatus(els.loginStatus, "", "");
+    hideInsecureWarning();
     await render();
   } catch (e) {
     setStatus(els.loginStatus, e.message, "error");
   }
+}
+
+els.loginBtn.addEventListener("click", async () => {
+  const server = els.serverInput.value.trim();
+  if (api.isInsecureServer(server)) {
+    // Require explicit, informed consent before any connection is attempted —
+    // this is a fresh click/user gesture, so permissions.request() inside a
+    // later doLogin() call (triggered by the Continue button) still qualifies.
+    els.insecureWarning.classList.add("visible");
+    setStatus(els.loginStatus, "", "");
+    return;
+  }
+  await doLogin();
+});
+
+els.insecureAckInput.addEventListener("change", () => {
+  els.insecureContinueBtn.disabled = !els.insecureAckInput.checked;
+});
+
+els.insecureContinueBtn.addEventListener("click", async () => {
+  if (!els.insecureAckInput.checked) return;
+  els.insecureWarning.classList.remove("visible");
+  await doLogin();
+});
+
+els.insecureCancelBtn.addEventListener("click", () => {
+  hideInsecureWarning();
+});
+
+els.serverInput.addEventListener("input", () => {
+  hideInsecureWarning();
 });
 
 els.logoutBtn.addEventListener("click", async () => {

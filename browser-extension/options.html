@@ -37,6 +37,16 @@
   #folder-row { display: none; }
   #folder-row.visible { display: block; }
   .hint { font-size: 0.72rem; color: var(--muted); margin-top: -0.5rem; margin-bottom: 0.85rem; }
+  .warning-box { display: none; border: 1px solid var(--danger); background: rgba(255,61,90,0.08);
+                 padding: 0.85rem; margin-bottom: 0.85rem; }
+  .warning-box.visible { display: block; }
+  .warning-box p { font-size: 0.78rem; line-height: 1.5; color: var(--text); margin: 0 0 0.7rem; }
+  .warning-box .warning-title { font-family: var(--mono); font-size: 0.72rem; color: var(--danger);
+                                 text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; display: block; }
+  .warning-box .ack-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.85rem; }
+  .warning-box .ack-row label { font-size: 0.78rem; color: var(--text); margin: 0; }
+  .warning-box .ack-row input { margin-top: 0.2rem; }
+  .warning-box .warning-actions { display: flex; gap: 0.6rem; }
 </style>
 </head>
 <body>
@@ -51,6 +61,25 @@
       <input type="text" id="username-input">
       <label for="password-input">Password</label>
       <input type="password" id="password-input">
+
+      <div class="warning-box" id="insecure-warning">
+        <span class="warning-title">Unencrypted connection</span>
+        <p>
+          This server address uses plain HTTP, not HTTPS. Your username, password, and
+          API token will be sent unencrypted and can be read by anyone on the network
+          path between you and the server. Only continue if this server really is your
+          own machine or a network you trust.
+        </p>
+        <div class="ack-row">
+          <input type="checkbox" id="insecure-ack-input">
+          <label for="insecure-ack-input">I understand this connection is not encrypted and want to continue.</label>
+        </div>
+        <div class="warning-actions">
+          <button class="btn-danger" id="insecure-continue-btn" disabled>Continue Anyway</button>
+          <button class="btn-secondary" id="insecure-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
       <button class="btn-primary" id="login-btn">Log In</button>
       <div id="login-status" class="status"></div>
     </div>
