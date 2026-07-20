@@ -87,7 +87,7 @@ els.loginBtn.addEventListener("click", async () => {
 
 els.logoutBtn.addEventListener("click", async () => {
   await api.logout();
-  await chrome.alarms.clear(ALARM_NAME);
+  await browser.alarms.clear(ALARM_NAME);
   await render();
 });
 
@@ -104,9 +104,9 @@ els.saveBtn.addEventListener("click", async () => {
 
   await setSyncConfig({ mode, folderId, periodicMinutes });
 
-  await chrome.alarms.clear(ALARM_NAME);
+  await browser.alarms.clear(ALARM_NAME);
   if (mode !== "off" && periodicMinutes > 0) {
-    chrome.alarms.create(ALARM_NAME, { periodInMinutes: periodicMinutes });
+    browser.alarms.create(ALARM_NAME, { periodInMinutes: periodicMinutes });
   }
 
   setStatus(els.syncStatus, "Settings saved.", "success");
@@ -114,7 +114,7 @@ els.saveBtn.addEventListener("click", async () => {
 
 els.syncNowBtn.addEventListener("click", async () => {
   setStatus(els.syncStatus, "Syncing…", "");
-  const response = await chrome.runtime.sendMessage({ type: "SYNC_NOW" });
+  const response = await browser.runtime.sendMessage({ type: "SYNC_NOW" });
   if (!response.ok) {
     setStatus(els.syncStatus, response.error, "error");
     return;

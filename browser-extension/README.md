@@ -47,9 +47,11 @@ updated in place rather than duplicated.
 
 ## Notes
 
-- Manifest V3, using `chrome.*` APIs (Chrome/Edge). Firefox 109+ also
-  supports MV3 with `browser.*`/`chrome.*` interchangeably for the APIs
-  this extension uses, but hasn't been tested there — file an issue if
-  something doesn't work.
+- Manifest V3, using the promise-based `browser.*` API (via Mozilla's
+  official `webextension-polyfill`, vendored in `lib/browser-polyfill.js`),
+  so the same code runs unmodified on Chrome, Edge, and Firefox 109+. The
+  manifest declares both `background.service_worker` (Chrome/Edge/modern
+  Firefox) and `background.scripts` (older Firefox MV3) plus a
+  `browser_specific_settings.gecko.id`, all needed for Firefox to load it.
 - No host permissions are requested upfront. The extension asks for access
   to your specific server only, at login time.

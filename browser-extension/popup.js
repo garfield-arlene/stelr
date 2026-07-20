@@ -20,7 +20,7 @@ function setStatus(el, message, kind) {
 }
 
 els.openSettingsBtn.addEventListener("click", () => {
-  chrome.runtime.openOptionsPage();
+  browser.runtime.openOptionsPage();
 });
 
 async function init() {
@@ -31,7 +31,7 @@ async function init() {
     return;
   }
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab) {
     els.titleInput.value = tab.title || "";
     els.urlInput.value = tab.url || "";
@@ -73,7 +73,7 @@ els.saveBtn.addEventListener("click", async () => {
 
 els.syncNowBtn.addEventListener("click", async () => {
   setStatus(els.syncStatus, "Syncing…", "");
-  const response = await chrome.runtime.sendMessage({ type: "SYNC_NOW" });
+  const response = await browser.runtime.sendMessage({ type: "SYNC_NOW" });
   if (!response.ok) {
     setStatus(els.syncStatus, response.error, "error");
     return;

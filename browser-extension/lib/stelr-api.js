@@ -3,16 +3,16 @@
 const CONFIG_KEY = "stelrConfig";
 
 export async function getConfig() {
-  const data = await chrome.storage.local.get(CONFIG_KEY);
+  const data = await browser.storage.local.get(CONFIG_KEY);
   return data[CONFIG_KEY] || null;
 }
 
 export async function setConfig(config) {
-  await chrome.storage.local.set({ [CONFIG_KEY]: config });
+  await browser.storage.local.set({ [CONFIG_KEY]: config });
 }
 
 export async function clearConfig() {
-  await chrome.storage.local.remove(CONFIG_KEY);
+  await browser.storage.local.remove(CONFIG_KEY);
 }
 
 function originPattern(server) {
@@ -20,16 +20,20 @@ function originPattern(server) {
 }
 
 export async function hasHostPermission(server) {
-  return chrome.permissions.contains({ origins: [originPattern(server)] });
+  return browser.permissions.contains({ origins: [originPattern(server)] });
 }
 
 export async function requestHostPermission(server) {
-  return chrome.permissions.request({ origins: [originPattern(server)] });
+  return browser.permissions.request({ origins: [originPattern(server)] });
 }
 
 export async function login(server, username, password, tokenName) {
   server = server.replace(/\/+$/, "");
-  const granted = (await hasHostPermission(server)) || (await requestHostPermission(server));
+  // Must be the very first async operation here (no preceding await), since
+  // permissions.request() is only callable from within a live user gesture
+  // (the click that triggered this call) — it resolves immediately with no
+  // prompt if the origin is already granted, so this stays cheap either way.
+  const granted = await requestHostPermission(server);
   if (!granted) {
     throw new Error("Permission to contact that server was not granted.");
   }

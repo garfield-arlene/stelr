@@ -4,7 +4,6 @@
 import * as api from "./stelr-api.js";
 
 const SYNC_KEY = "stelrSync";
-const FULL_SYNC_ROOT_ID = "0";
 
 const DEFAULT_SYNC = {
   mode: "off",          // "off" | "folder" | "full"
@@ -15,20 +14,28 @@ const DEFAULT_SYNC = {
 };
 
 export async function getSyncConfig() {
-  const data = await chrome.storage.local.get(SYNC_KEY);
+  const data = await browser.storage.local.get(SYNC_KEY);
   return { ...DEFAULT_SYNC, ...(data[SYNC_KEY] || {}) };
 }
 
 export async function setSyncConfig(patch) {
   const current = await getSyncConfig();
   const next = { ...current, ...patch };
-  await chrome.storage.local.set({ [SYNC_KEY]: next });
+  await browser.storage.local.set({ [SYNC_KEY]: next });
   return next;
 }
 
-/** Flatten a bookmark subtree into { id, title, url, parentTitle } leaves. */
-async function collectBookmarks(rootId) {
-  const [root] = await chrome.bookmarks.getSubTree(rootId);
+/**
+ * Flatten a bookmark subtree into { id, title, url, parentTitle } leaves.
+ * Pass a specific folderId to scope to that folder, or omit it to walk the
+ * whole tree — root bookmark/folder IDs are not portable across browsers
+ * (Chrome uses "0", Firefox uses its own GUID-style roots), so the full-tree
+ * case must go through getTree() rather than a hardcoded root ID.
+ */
+async function collectBookmarks(folderId) {
+  const [root] = folderId
+    ? await browser.bookmarks.getSubTree(folderId)
+    : await browser.bookmarks.getTree();
   const results = [];
 
   function walk(node, parentTitle) {
@@ -57,12 +64,11 @@ export async function runSync() {
     return { skipped: true };
   }
 
-  const rootId = syncCfg.mode === "folder" ? syncCfg.folderId : FULL_SYNC_ROOT_ID;
-  if (syncCfg.mode === "folder" && !rootId) {
+  if (syncCfg.mode === "folder" && !syncCfg.folderId) {
     throw new Error("No sync folder selected.");
   }
 
-  const bookmarks = await collectBookmarks(rootId);
+  const bookmarks = await collectBookmarks(syncCfg.mode === "folder" ? syncCfg.folderId : null);
 
   const existingGroups = await api.getGroups();
   const groupIdByName = new Map(existingGroups.map((g) => [g.name, g.id]));
@@ -106,7 +112,7 @@ export async function runSync() {
 }
 
 export async function listBookmarkFolders() {
-  const [root] = await chrome.bookmarks.getTree();
+  const [root] = await browser.bookmarks.getTree();
   const folders = [];
 
   function walk(node, depth) {

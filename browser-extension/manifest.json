@@ -19,9 +19,16 @@
   "options_page": "options.html",
   "background": {
     "service_worker": "background.js",
+    "scripts": ["background.js"],
     "type": "module"
   },
   "permissions": ["storage", "bookmarks", "activeTab", "alarms"],
   "optional_host_permissions": ["*://*/*"],
-  "minimum_chrome_version": "102"
+  "minimum_chrome_version": "102",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "stelr-bookmark-sync@stelr.app",
+      "strict_min_version": "109.0"
+    }
+  }
 }
