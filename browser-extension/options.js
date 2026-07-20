@@ -16,6 +16,8 @@ const els = {
   syncPanel: document.getElementById("sync-panel"),
   folderRow: document.getElementById("folder-row"),
   folderSelect: document.getElementById("folder-select"),
+  bidirectionalInput: document.getElementById("bidirectional-input"),
+  propagateDeletesInput: document.getElementById("propagate-deletes-input"),
   intervalInput: document.getElementById("interval-input"),
   saveBtn: document.getElementById("save-btn"),
   syncNowBtn: document.getElementById("sync-now-btn"),
@@ -51,14 +53,19 @@ async function render() {
     document.getElementById(`mode-${syncCfg.mode}`).checked = true;
     els.folderRow.classList.toggle("visible", syncCfg.mode === "folder");
     if (syncCfg.folderId) els.folderSelect.value = syncCfg.folderId;
+    els.bidirectionalInput.checked = !!syncCfg.bidirectional;
+    els.propagateDeletesInput.checked = !!syncCfg.propagateDeletes;
     els.intervalInput.value = syncCfg.periodicMinutes || 0;
 
     if (syncCfg.lastResult) {
       const r = syncCfg.lastResult;
+      const parts = [`${r.created} added`, `${r.updated} updated`, `${r.unchanged} unchanged`];
+      if (r.pulled) parts.push(`${r.pulled} pulled`);
+      if (r.removedFromStelr) parts.push(`${r.removedFromStelr} deleted from Stelr`);
+      if (r.removedFromBrowser) parts.push(`${r.removedFromBrowser} deleted from browser`);
+      if (r.errors) parts.push(`${r.errors} errors`);
       setStatus(els.syncStatus,
-        `Last sync (${new Date(r.at).toLocaleString()}): ${r.created} added, ` +
-        `${r.updated} updated, ${r.unchanged} unchanged` +
-        (r.errors ? `, ${r.errors} errors` : "") + `.`,
+        `Last sync (${new Date(r.at).toLocaleString()}): ${parts.join(", ")}.`,
         r.errors ? "error" : "success");
     }
   } else {
@@ -100,9 +107,11 @@ for (const radio of document.querySelectorAll('input[name="sync-mode"]')) {
 els.saveBtn.addEventListener("click", async () => {
   const mode = document.querySelector('input[name="sync-mode"]:checked').value;
   const folderId = mode === "folder" ? els.folderSelect.value : null;
+  const bidirectional = els.bidirectionalInput.checked;
+  const propagateDeletes = els.propagateDeletesInput.checked;
   const periodicMinutes = Math.max(0, parseInt(els.intervalInput.value, 10) || 0);
 
-  await setSyncConfig({ mode, folderId, periodicMinutes });
+  await setSyncConfig({ mode, folderId, bidirectional, propagateDeletes, periodicMinutes });
 
   await browser.alarms.clear(ALARM_NAME);
   if (mode !== "off" && periodicMinutes > 0) {

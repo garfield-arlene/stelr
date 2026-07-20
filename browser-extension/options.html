@@ -79,8 +79,20 @@
       <label for="mode-full" style="margin:0">Sync all bookmarks</label>
     </div>
     <div class="hint">
-      Each top-level folder becomes a Stelr group of the same name. Sync only adds and
-      updates links — deleting a bookmark does not delete its Stelr link.
+      Each top-level folder becomes a Stelr group of the same name.
+    </div>
+
+    <div class="radio-row">
+      <input type="checkbox" id="bidirectional-input">
+      <label for="bidirectional-input" style="margin:0">Two-way sync — also pull Stelr-only links into this browser (new ones land in a "Stelr Sync" folder, or directly in the chosen folder above)</label>
+    </div>
+    <div class="radio-row">
+      <input type="checkbox" id="propagate-deletes-input">
+      <label for="propagate-deletes-input" style="margin:0">Propagate deletions — deleting a bookmark on either side deletes it on the other</label>
+    </div>
+    <div class="hint">
+      Deletions only propagate for items this extension has already synced, and only once
+      a bookmark is confirmed gone (not just moved out of the current sync scope).
     </div>
 
     <label for="interval-input">Automatic sync every (minutes, 0 = manual only)</label>

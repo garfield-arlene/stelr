@@ -5,12 +5,22 @@ import * as api from "./stelr-api.js";
 
 const SYNC_KEY = "stelrSync";
 
+// Dedicated landing folder for links that originate on the Stelr side during
+// full-tree two-way sync. There's no single portable "top level" folder id
+// across browsers (Chrome's invisible root is "0", Firefox uses GUID-style
+// roots), and guessing which of Bookmarks Bar / Other Bookmarks / Mobile
+// Bookmarks the user wants new items in would be arbitrary, so pulled links
+// always land in this folder (or a subfolder named after their group).
+const SYNC_ROOT_TITLE = "Stelr Sync";
+
 const DEFAULT_SYNC = {
-  mode: "off",          // "off" | "folder" | "full"
-  folderId: null,        // bookmark folder id, only used when mode === "folder"
-  periodicMinutes: 0,    // 0 = manual only
-  bookmarkMap: {},        // browserBookmarkId -> { linkId, title, url, groupId }
-  lastResult: null,       // { created, updated, errors, total, at }
+  mode: "off",             // "off" | "folder" | "full"
+  folderId: null,           // bookmark folder id, only used when mode === "folder"
+  periodicMinutes: 0,       // 0 = manual only
+  bidirectional: false,     // also pull Stelr-only links into the browser
+  propagateDeletes: false,  // deleting on one side deletes on the other
+  bookmarkMap: {},           // browserBookmarkId -> { linkId, title, url, groupId }
+  lastResult: null,          // { created, updated, unchanged, pulled, removedFromStelr, removedFromBrowser, errors, total, at }
 };
 
 export async function getSyncConfig() {
@@ -58,6 +68,27 @@ async function collectBookmarks(folderId) {
   return results;
 }
 
+/** Find a child folder of parentId with the given title, creating it if absent. */
+async function findOrCreateFolder(parentId, title, cache) {
+  const cacheKey = `${parentId}::${title}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+  const children = await browser.bookmarks.getChildren(parentId);
+  const existing = children.find((c) => !c.url && c.title === title);
+  const id = existing ? existing.id : (await browser.bookmarks.create({ parentId, title })).id;
+  cache.set(cacheKey, id);
+  return id;
+}
+
+/** Resolve the folder that pulled (Stelr-only) links get created under. */
+async function getPullRootId(syncCfg) {
+  if (syncCfg.mode === "folder") return syncCfg.folderId;
+  const matches = await browser.bookmarks.search({ title: SYNC_ROOT_TITLE });
+  const existing = matches.find((n) => !n.url);
+  if (existing) return existing.id;
+  const [root] = await browser.bookmarks.getTree();
+  return (await browser.bookmarks.create({ parentId: root.children[0].id, title: SYNC_ROOT_TITLE })).id;
+}
+
 export async function runSync() {
   const syncCfg = await getSyncConfig();
   if (syncCfg.mode === "off") {
@@ -69,13 +100,17 @@ export async function runSync() {
   }
 
   const bookmarks = await collectBookmarks(syncCfg.mode === "folder" ? syncCfg.folderId : null);
+  const localIds = new Set(bookmarks.map((b) => b.id));
 
   const existingGroups = await api.getGroups();
   const groupIdByName = new Map(existingGroups.map((g) => [g.name, g.id]));
+  const groupNameById = new Map(existingGroups.map((g) => [g.id, g.name]));
 
   const bookmarkMap = { ...syncCfg.bookmarkMap };
   let created = 0, updated = 0, unchanged = 0, errors = 0;
+  let pulled = 0, removedFromStelr = 0, removedFromBrowser = 0;
 
+  // Push: browser -> Stelr.
   for (const bm of bookmarks) {
     try {
       let groupId = "";
@@ -83,6 +118,7 @@ export async function runSync() {
         if (!groupIdByName.has(bm.parentTitle)) {
           const g = await api.createGroup(bm.parentTitle);
           groupIdByName.set(bm.parentTitle, g.id);
+          groupNameById.set(g.id, g.name);
         }
         groupId = groupIdByName.get(bm.parentTitle);
       }
@@ -106,7 +142,78 @@ export async function runSync() {
     }
   }
 
-  const result = { created, updated, unchanged, errors, total: bookmarks.length, at: new Date().toISOString() };
+  // Deletions, browser -> Stelr: a previously-synced browser bookmark that's
+  // both missing from this run's collected set AND confirmed gone from the
+  // browser entirely (not just out of the current sync scope, e.g. after
+  // switching sync folders) was deleted locally, so remove its Stelr link too.
+  if (syncCfg.propagateDeletes) {
+    for (const [browserId, entry] of Object.entries(bookmarkMap)) {
+      if (localIds.has(browserId)) continue;
+      try {
+        await browser.bookmarks.get(browserId);
+        continue; // still exists somewhere in the browser, just out of scope
+      } catch (e) {
+        // confirmed gone — fall through and propagate the deletion
+      }
+      try {
+        await api.deleteLink(entry.linkId);
+      } catch (e) {
+        // already gone server-side, or a transient error; stop tracking it
+        // either way so we don't retry forever
+      }
+      delete bookmarkMap[browserId];
+      removedFromStelr++;
+    }
+  }
+
+  // Pull: Stelr -> browser. Only fetch the full link list when it's actually
+  // needed (bidirectional sync and/or remote-delete propagation).
+  if (syncCfg.bidirectional || syncCfg.propagateDeletes) {
+    const existingLinks = await api.getLinks();
+    const linkIds = new Set(existingLinks.map((l) => l.id));
+    const trackedLinkIds = new Set(Object.values(bookmarkMap).map((e) => e.linkId));
+
+    if (syncCfg.propagateDeletes) {
+      for (const [browserId, entry] of Object.entries(bookmarkMap)) {
+        if (linkIds.has(entry.linkId)) continue;
+        try {
+          await browser.bookmarks.remove(browserId);
+        } catch (e) {
+          // already gone locally; drop the mapping regardless
+        }
+        delete bookmarkMap[browserId];
+        removedFromBrowser++;
+      }
+    }
+
+    if (syncCfg.bidirectional) {
+      const folderCache = new Map();
+      const pullRootId = await getPullRootId(syncCfg);
+      for (const link of existingLinks) {
+        if (trackedLinkIds.has(link.id)) continue;
+        try {
+          const groupName = link.group_id ? groupNameById.get(link.group_id) : null;
+          const parentId = groupName
+            ? await findOrCreateFolder(pullRootId, groupName, folderCache)
+            : pullRootId;
+          const newBookmark = await browser.bookmarks.create({
+            parentId, title: link.title || link.url, url: link.url,
+          });
+          bookmarkMap[newBookmark.id] = {
+            linkId: link.id, title: link.title, url: link.url, groupId: link.group_id || "",
+          };
+          pulled++;
+        } catch (e) {
+          errors++;
+        }
+      }
+    }
+  }
+
+  const result = {
+    created, updated, unchanged, pulled, removedFromStelr, removedFromBrowser, errors,
+    total: bookmarks.length, at: new Date().toISOString(),
+  };
   await setSyncConfig({ bookmarkMap, lastResult: result });
   return result;
 }

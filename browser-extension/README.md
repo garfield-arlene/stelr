@@ -1,7 +1,8 @@
 # Stelr Bookmark Sync (browser extension)
 
 Save the current page, sync a specific bookmark folder, or sync your entire
-browser bookmark tree to a self-hosted Stelr instance.
+browser bookmark tree to a self-hosted Stelr instance — one-way (browser →
+Stelr) by default, with optional two-way sync and deletion propagation.
 
 ## Loading it (development / unpacked)
 
@@ -35,15 +36,25 @@ browser bookmark tree to a self-hosted Stelr instance.
 - **Sync a bookmark folder** — in Settings, choose "Sync a specific bookmark
   folder", pick the folder, save, then click **Sync Now**.
 - **Sync everything** — choose "Sync all bookmarks" instead.
+- **Two-way sync** — enable "Two-way sync" in Settings to also pull
+  Stelr-only links into the browser. Pulled links land in a group-named
+  subfolder inside a dedicated **Stelr Sync** folder (full-sync mode), or
+  directly inside the chosen folder (folder-sync mode).
+- **Propagate deletions** — enable "Propagate deletions" in Settings so
+  deleting a bookmark on either side deletes it on the other, next sync.
+  Only items this extension has already synced are eligible, and a browser
+  bookmark is only treated as deleted once it's confirmed gone entirely (not
+  just moved out of the current sync scope, e.g. after switching folders).
 - **Automatic sync** — set a non-zero interval (minutes) in Settings to sync
   in the background on a timer, in addition to the manual **Sync Now**
   button.
 
 Each top-level folder becomes a Stelr group of the same name (auto-created
-if it doesn't exist yet). Sync only **adds and updates** links — deleting a
-bookmark in your browser does not delete the corresponding Stelr link.
-Re-running sync is safe: previously-synced bookmarks are matched and
-updated in place rather than duplicated.
+if it doesn't exist yet). By default sync only **adds and updates** links in
+one direction (browser → Stelr) and never deletes anything — turn on
+two-way sync and/or deletion propagation above to change that. Re-running
+sync is safe: previously-synced bookmarks are matched and updated in place
+rather than duplicated.
 
 ## Notes
 
