@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v5.0.3**
+**v5.0.3** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -474,3 +474,12 @@ podman compose --profile yaml down -v
 ```bash
 ADMIN_PASSWORD=mysecurepassword SESSION_TIMEOUT_MINUTES=60 podman compose up
 ```
+
+---
+
+## License
+
+Stelr is licensed under the [GNU Affero General Public License v3.0](LICENSE)
+(AGPL-3.0). If you run a modified version of Stelr as a network service,
+the AGPL requires that you make your modified source available to that
+service's users.

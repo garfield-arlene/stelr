@@ -4,6 +4,8 @@ Save the current page, sync a specific bookmark folder, or sync your entire
 browser bookmark tree to a self-hosted Stelr instance — one-way (browser →
 Stelr) by default, with optional two-way sync and deletion propagation.
 
+Licensed under [AGPL-3.0](../LICENSE), same as the rest of the Stelr project.
+
 ## Loading it (development / unpacked)
 
 **Chrome / Edge**
