@@ -19,6 +19,26 @@ Licensed under [AGPL-3.0](../LICENSE), same as the rest of the Stelr project.
    (Temporary add-ons are removed when Firefox restarts — fine for testing,
    but Firefox needs its own signed/packaged build for real installs.)
 
+## Packaging for the stores
+
+Chrome, Edge, and Firefox each validate `manifest.json`'s MV3 `background`
+key differently — Chrome silently ignores an extra `background.scripts`
+entry, Edge's upload validator rejects it outright, and Firefox needs
+`scripts` since it doesn't support `service_worker`. No single
+`manifest.json` satisfies all three store validators, so `package.py`
+builds one per target instead of relying on the dev-loading manifest above:
+
+```bash
+cd browser-extension
+python3 package.py
+```
+
+This writes `dist/stelr-bookmark-sync-{chrome,edge,firefox}-vX.Y.Z.zip`.
+Upload the matching zip to each store's developer dashboard — `chrome` and
+`edge` are byte-identical (Edge is Chromium-based and needs nothing
+Firefox-specific), kept as separate files only so the filename matches the
+store you're uploading to.
+
 ## Setting it up
 
 1. Click the extension icon → **Open Settings** (or right-click the icon →
