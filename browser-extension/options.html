@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Stelr Bookmark Sync — Settings</title>
+<style>
+  :root {
+    --bg: #0d0f12; --surface: #161a1f; --border: #2a2f38;
+    --accent: #00e5a0; --accent2: #0099ff; --danger: #ff3d5a;
+    --text: #d4dbe8; --muted: #5a6478;
+    --mono: 'Share Tech Mono', monospace, monospace; --sans: -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans);
+         max-width: 560px; margin: 2rem auto; padding: 0 1.5rem; }
+  h1 { font-family: var(--mono); font-size: 1.1rem; color: var(--accent); letter-spacing: 2px;
+       margin-bottom: 1.5rem; }
+  .panel { background: var(--surface); border: 1px solid var(--border); padding: 1.25rem;
+           margin-bottom: 1.25rem; }
+  .panel h2 { font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
+              text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 1rem; }
+  label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 0.3rem; }
+  input[type="text"], input[type="password"], input[type="number"], input[type="url"], select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    font-family: var(--mono); font-size: 0.85rem; padding: 0.5rem 0.7rem; margin-bottom: 0.85rem;
+  }
+  .radio-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.6rem; font-size: 0.85rem; }
+  button { font-family: var(--mono); font-size: 0.75rem; text-transform: uppercase;
+           letter-spacing: 1px; padding: 0.55rem 1rem; border: none; cursor: pointer; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .status { font-size: 0.8rem; margin-top: 0.75rem; }
+  .status.error { color: var(--danger); }
+  .status.success { color: var(--accent); }
+  .connected-badge { font-family: var(--mono); font-size: 0.8rem; color: var(--accent); margin-bottom: 0.75rem; }
+  #folder-row { display: none; }
+  #folder-row.visible { display: block; }
+  .hint { font-size: 0.72rem; color: var(--muted); margin-top: -0.5rem; margin-bottom: 0.85rem; }
+  .warning-box { display: none; border: 1px solid var(--danger); background: rgba(255,61,90,0.08);
+                 padding: 0.85rem; margin-bottom: 0.85rem; }
+  .warning-box.visible { display: block; }
+  .warning-box p { font-size: 0.78rem; line-height: 1.5; color: var(--text); margin: 0 0 0.7rem; }
+  .warning-box .warning-title { font-family: var(--mono); font-size: 0.72rem; color: var(--danger);
+                                 text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; display: block; }
+  .warning-box .ack-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.85rem; }
+  .warning-box .ack-row label { font-size: 0.78rem; color: var(--text); margin: 0; }
+  .warning-box .ack-row input { margin-top: 0.2rem; }
+  .warning-box .warning-actions { display: flex; gap: 0.6rem; }
+</style>
+</head>
+<body>
+  <h1>// STELR BOOKMARK SYNC</h1>
+
+  <div class="panel" id="login-panel">
+    <h2>Connection</h2>
+    <div id="logged-out-view">
+      <label for="server-input">Stelr Server URL</label>
+      <input type="url" id="server-input" placeholder="https://stelr.example.com">
+      <label for="username-input">Username</label>
+      <input type="text" id="username-input">
+      <label for="password-input">Password</label>
+      <input type="password" id="password-input">
+
+      <div class="warning-box" id="insecure-warning">
+        <span class="warning-title">Unencrypted connection</span>
+        <p>
+          This server address uses plain HTTP, not HTTPS. Your username, password, and
+          API token will be sent unencrypted and can be read by anyone on the network
+          path between you and the server. Only continue if this server really is your
+          own machine or a network you trust.
+        </p>
+        <div class="ack-row">
+          <input type="checkbox" id="insecure-ack-input">
+          <label for="insecure-ack-input">I understand this connection is not encrypted and want to continue.</label>
+        </div>
+        <div class="warning-actions">
+          <button class="btn-danger" id="insecure-continue-btn" disabled>Continue Anyway</button>
+          <button class="btn-secondary" id="insecure-cancel-btn">Cancel</button>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="login-btn">Log In</button>
+      <div id="login-status" class="status"></div>
+    </div>
+    <div id="logged-in-view" style="display:none">
+      <div class="connected-badge" id="connected-badge"></div>
+      <button class="btn-danger" id="logout-btn">Log Out</button>
+    </div>
+  </div>
+
+  <div class="panel" id="sync-panel" style="display:none">
+    <h2>Sync Mode</h2>
+    <div class="radio-row">
+      <input type="radio" name="sync-mode" id="mode-off" value="off">
+      <label for="mode-off" style="margin:0">Off — only use "Save current page" from the toolbar</label>
+    </div>
+    <div class="radio-row">
+      <input type="radio" name="sync-mode" id="mode-folder" value="folder">
+      <label for="mode-folder" style="margin:0">Sync a specific bookmark folder</label>
+    </div>
+    <div id="folder-row">
+      <label for="folder-select">Folder</label>
+      <select id="folder-select"></select>
+    </div>
+    <div class="radio-row">
+      <input type="radio" name="sync-mode" id="mode-full" value="full">
+      <label for="mode-full" style="margin:0">Sync all bookmarks</label>
+    </div>
+    <div class="hint">
+      Each top-level folder becomes a Stelr group of the same name.
+    </div>
+
+    <div class="radio-row">
+      <input type="checkbox" id="bidirectional-input">
+      <label for="bidirectional-input" style="margin:0">Two-way sync — also pull Stelr-only links into this browser (new ones land in a "Stelr Sync" folder, or directly in the chosen folder above)</label>
+    </div>
+    <div class="radio-row">
+      <input type="checkbox" id="propagate-deletes-input">
+      <label for="propagate-deletes-input" style="margin:0">Propagate deletions — deleting a bookmark on either side deletes it on the other</label>
+    </div>
+    <div class="hint">
+      Deletions only propagate for items this extension has already synced, and only once
+      a bookmark is confirmed gone (not just moved out of the current sync scope).
+    </div>
+
+    <label for="interval-input">Automatic sync every (minutes, 0 = manual only)</label>
+    <input type="number" id="interval-input" min="0" value="0">
+
+    <button class="btn-primary" id="save-btn">Save Settings</button>
+    <button class="btn-secondary" id="sync-now-btn">Sync Now</button>
+    <div id="sync-status" class="status"></div>
+  </div>
+
+  <script src="lib/browser-polyfill.js"></script>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

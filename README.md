@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v5.0.2**
+**v5.0.3** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,10 +11,9 @@ and approval.
 
 ## New features and bug fixes
 
-- API tokens: generate personal access tokens (Account panel) for use outside the browser
-- Full JSON API for links and groups (create/read/update/delete), authenticated by token or session
-- Official CLI tool (`cli/stelr_cli.py`) for managing your bookmarks from the command line
-- Fixed Change Password always failing silently — the new password was never actually saved, so it stopped working after logout
+- Browser extension: required opt-in warning before connecting to a plain-HTTP, non-localhost Stelr server, since credentials and the API token would otherwise cross the network unencrypted
+- Fixed the browser extension failing to request server permissions on Firefox versions before 128
+- Browser extension: clearer error messages when the server can't be reached, including guidance for Firefox's Local Network Access protection blocking self-hosted servers on a local network
 
 ## Features
 
@@ -24,6 +23,7 @@ and approval.
 - User accounts with login, session timeout, and logout
 - Admin-controlled user registration and approval queue
 - REST API for programmatic access
+- Browser extension (Chrome, Edge, Firefox) to save pages or sync bookmarks, one-way or two-way
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
 - Admin can change user passwords
@@ -37,7 +37,6 @@ and approval.
 ## To do
 
 - User requests
-  - Build downloadable browser plugins for major browsers to optionally sync bookmarks
   - Create store accounts for Chrome, Mozilla, and Edge
   - Upload extensions to their respective stores
 
@@ -316,6 +315,19 @@ skip the confirmation prompt in scripts.
 
 ---
 
+## Browser Extension
+
+`browser-extension/` is a Manifest V3 extension for Chrome, Edge, and Firefox
+that connects to your Stelr instance via an API token. It supports three
+modes: save the current page on demand, sync a specific bookmark folder, or
+sync your entire bookmark tree — each on a manual or scheduled basis.
+Two-way sync (pulling Stelr-only links into the browser) and deletion
+propagation (keeping deletes in sync on both sides) are both opt-in. See
+[`browser-extension/README.md`](browser-extension/README.md) for setup and
+full details.
+
+---
+
 ## Storage Backends
 
 Stelr supports five storage backends, selected at startup via the
@@ -462,3 +474,12 @@ podman compose --profile yaml down -v
 ```bash
 ADMIN_PASSWORD=mysecurepassword SESSION_TIMEOUT_MINUTES=60 podman compose up
 ```
+
+---
+
+## License
+
+Stelr is licensed under the [GNU Affero General Public License v3.0](LICENSE)
+(AGPL-3.0). If you run a modified version of Stelr as a network service,
+the AGPL requires that you make your modified source available to that
+service's users.
