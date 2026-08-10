@@ -39,8 +39,6 @@ and approval.
 - User requests
   - Create store accounts for Chrome and Edge
   - Upload extensions to their respective stores
-  - ~~Create store account for Mozilla~~ done
-  - ~~Upload extension to Mozilla addons store~~ done — [live listing](https://addons.mozilla.org/en-US/firefox/addon/stelr-bookmark-sync/)
 
 ---
 
