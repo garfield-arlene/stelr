@@ -37,8 +37,10 @@ and approval.
 ## To do
 
 - User requests
-  - Create store accounts for Chrome, Mozilla, and Edge
+  - Create store accounts for Chrome and Edge
   - Upload extensions to their respective stores
+  - ~~Create store account for Mozilla~~ done
+  - ~~Upload extension to Mozilla addons store~~ done — [live listing](https://addons.mozilla.org/en-US/firefox/addon/stelr-bookmark-sync/)
 
 ---
 
@@ -325,6 +327,10 @@ Two-way sync (pulling Stelr-only links into the browser) and deletion
 propagation (keeping deletes in sync on both sides) are both opt-in. See
 [`browser-extension/README.md`](browser-extension/README.md) for setup and
 full details.
+
+- **Firefox**: [available on addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/stelr-bookmark-sync/)
+- **Chrome / Edge**: not yet published — load unpacked or build with
+  `package.py` per the instructions above
 
 ---
 
