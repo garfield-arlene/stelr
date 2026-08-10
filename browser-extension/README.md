@@ -4,6 +4,10 @@ Save the current page, sync a specific bookmark folder, or sync your entire
 browser bookmark tree to a self-hosted Stelr instance — one-way (browser →
 Stelr) by default, with optional two-way sync and deletion propagation.
 
+**Firefox**: install from [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/stelr-bookmark-sync/).
+Chrome and Edge builds aren't published to their stores yet — load unpacked
+or build a zip yourself, see below.
+
 Licensed under [AGPL-3.0](../LICENSE), same as the rest of the Stelr project.
 
 ## Loading it (development / unpacked)
