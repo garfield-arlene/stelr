@@ -1,0 +1,84 @@
+name: Build, Package, and Release Go App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release Version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+        type: string
+      go_version:
+        description: 'Go version to use'
+        required: true
+        default: '1.22'
+        type: string
+
+permissions:
+  contents: write 
+
+jobs:
+  build-and-release:
+    name: Build & Publish Multi-OS Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Go runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ github.event.inputs.go_version }}
+          cache: true
+
+      # --- macOS Builds & Packaging ---
+      - name: Build and Package macOS Intel
+        run: |
+          GOOS=darwin GOARCH=amd64 go build -v -o Stelr-desktop
+          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-macos-intel.tar.gz Stelr-desktop
+          rm Stelr-desktop
+
+      - name: Build and Package macOS Apple Silicon
+        run: |
+          GOOS=darwin GOARCH=arm64 go build -v -o Stelr-desktop
+          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-macos-arm64.tar.gz Stelr-desktop
+          rm Stelr-desktop
+
+      # --- Linux Builds & Packaging ---
+      - name: Build and Package Linux AMD64
+        run: |
+          GOOS=linux GOARCH=amd64 go build -v -o Stelr-desktop
+          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-linux-amd64.tar.gz Stelr-desktop
+          rm Stelr-desktop
+
+      - name: Build and Package Linux ARM64
+        run: |
+          GOOS=linux GOARCH=arm64 go build -v -o Stelr-desktop
+          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-linux-arm64.tar.gz Stelr-desktop
+          rm Stelr-desktop
+
+      # --- Windows Builds & Packaging ---
+      - name: Build and Package Windows AMD64
+        run: |
+          GOOS=windows GOARCH=amd64 go build -v -o Stelr-desktop.exe
+          zip Stelr-desktop-${{ github.event.inputs.version }}-windows-amd64.zip Stelr-desktop.exe
+          rm Stelr-desktop.exe
+
+      - name: Build and Package Windows ARM64
+        run: |
+          GOOS=windows GOARCH=arm64 go build -v -o Stelr-desktop.exe
+          zip Stelr-desktop-${{ github.event.inputs.version }}-windows-arm64.zip Stelr-desktop.exe
+          rm Stelr-desktop.exe
+
+      # --- Publish Compressed Archives ---
+      - name: Create GitHub Release and Upload Archives
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.event.inputs.version }}
+          name: "Release ${{ github.event.inputs.version }}"
+          body: "Automated multi-platform production build of Go application."
+          artifacts: "*.tar.gz,*.zip" # Wildcard catches all compressed packages cleanly
+          generateReleaseNotes: true 
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
