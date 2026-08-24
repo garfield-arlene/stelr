@@ -105,7 +105,13 @@ jobs:
         if: matrix.goos == 'linux'
         run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
 
+      # macOS (Tahoe+) dyld refuses to run Mach-O binaries missing an
+      # LC_UUID load command, which Go's internal linker doesn't emit;
+      # forcing external linking fixes it for both the fyne CLI tool below
+      # and the app binary fyne package builds internally.
       - name: Install fyne packaging tool
+        env:
+          GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
         run: go install fyne.io/tools/cmd/fyne@latest
 
       - name: Package app
@@ -113,7 +119,11 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
+          GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
         run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop
+
+      - name: List packaged output (debug)
+        run: ls -la
 
       # fyne package's own output already has proper OS icon integration
       # (a real .app bundle on macOS, a .desktop-file-bearing tarball on
