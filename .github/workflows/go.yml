@@ -13,14 +13,19 @@ on:
         required: true
         default: '1.22'
         type: string
-
-permissions:
-  contents: write 
+      publish_release:
+        description: 'Publish a public GitHub Release with these binaries (leave unchecked for a private test build you can download from the run summary)'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
-  build-and-release:
-    name: Build & Publish Multi-OS Release
+  build:
+    name: Build & Package Multi-OS Binaries
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stelr-desktop
 
     steps:
       - name: Checkout source code
@@ -71,14 +76,38 @@ jobs:
           zip Stelr-desktop-${{ github.event.inputs.version }}-windows-arm64.zip Stelr-desktop.exe
           rm Stelr-desktop.exe
 
-      # --- Publish Compressed Archives ---
+      # --- Upload as a private, non-published build artifact ---
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stelr-desktop-${{ github.event.inputs.version }}
+          path: |
+            stelr-desktop/*.tar.gz
+            stelr-desktop/*.zip
+          retention-days: 14
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build
+    if: ${{ inputs.publish_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: stelr-desktop-${{ github.event.inputs.version }}
+          path: dist
+
       - name: Create GitHub Release and Upload Archives
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ github.event.inputs.version }}
           name: "Release ${{ github.event.inputs.version }}"
           body: "Automated multi-platform production build of Go application."
-          artifacts: "*.tar.gz,*.zip" # Wildcard catches all compressed packages cleanly
-          generateReleaseNotes: true 
+          artifacts: "dist/*.tar.gz,dist/*.zip"
+          generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          
+
