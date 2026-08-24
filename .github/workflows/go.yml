@@ -21,11 +21,48 @@ on:
 
 jobs:
   build:
-    name: Build & Package Multi-OS Binaries
-    runs-on: ubuntu-latest
+    name: Build & Package (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     defaults:
       run:
+        shell: bash
         working-directory: stelr-desktop
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS Apple Silicon runners can natively target amd64 too, via
+          # Xcode's universal clang -- no separate Intel runner needed.
+          - name: macos-intel
+            runner: macos-latest
+            goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - name: macos-arm64
+            runner: macos-latest
+            goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          - name: linux-amd64
+            runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - name: windows-amd64
+            runner: windows-latest
+            goos: windows
+            goarch: amd64
+            archive: zip
+          - name: windows-arm64
+            runner: windows-11-arm
+            goos: windows
+            goarch: arm64
+            archive: zip
 
     steps:
       - name: Checkout source code
@@ -37,50 +74,37 @@ jobs:
           go-version: ${{ github.event.inputs.go_version }}
           cache: true
 
-      # --- macOS Builds & Packaging ---
-      - name: Build and Package macOS Intel
-        run: |
-          GOOS=darwin GOARCH=amd64 go build -v -o Stelr-desktop
-          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-macos-intel.tar.gz Stelr-desktop
-          rm Stelr-desktop
+      - name: Install Linux GUI build dependencies
+        if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
 
-      - name: Build and Package macOS Apple Silicon
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
         run: |
-          GOOS=darwin GOARCH=arm64 go build -v -o Stelr-desktop
-          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-macos-arm64.tar.gz Stelr-desktop
-          rm Stelr-desktop
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            go build -v -o Stelr-desktop.exe
+          else
+            go build -v -o Stelr-desktop
+          fi
 
-      # --- Linux Builds & Packaging ---
-      - name: Build and Package Linux AMD64
+      - name: Package archive
         run: |
-          GOOS=linux GOARCH=amd64 go build -v -o Stelr-desktop
-          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-linux-amd64.tar.gz Stelr-desktop
-          rm Stelr-desktop
-
-      - name: Build and Package Linux ARM64
-        run: |
-          GOOS=linux GOARCH=arm64 go build -v -o Stelr-desktop
-          tar -czf Stelr-desktop-${{ github.event.inputs.version }}-linux-arm64.tar.gz Stelr-desktop
-          rm Stelr-desktop
-
-      # --- Windows Builds & Packaging ---
-      - name: Build and Package Windows AMD64
-        run: |
-          GOOS=windows GOARCH=amd64 go build -v -o Stelr-desktop.exe
-          zip Stelr-desktop-${{ github.event.inputs.version }}-windows-amd64.zip Stelr-desktop.exe
-          rm Stelr-desktop.exe
-
-      - name: Build and Package Windows ARM64
-        run: |
-          GOOS=windows GOARCH=arm64 go build -v -o Stelr-desktop.exe
-          zip Stelr-desktop-${{ github.event.inputs.version }}-windows-arm64.zip Stelr-desktop.exe
-          rm Stelr-desktop.exe
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            zip "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip" Stelr-desktop.exe
+            rm Stelr-desktop.exe
+          else
+            tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" Stelr-desktop
+            rm Stelr-desktop
+          fi
 
       # --- Upload as a private, non-published build artifact ---
-      - name: Upload build artifacts
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: stelr-desktop-${{ github.event.inputs.version }}
+          name: stelr-desktop-${{ matrix.name }}
           path: |
             stelr-desktop/*.tar.gz
             stelr-desktop/*.zip
@@ -98,8 +122,9 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: stelr-desktop-${{ github.event.inputs.version }}
+          pattern: stelr-desktop-*
           path: dist
+          merge-multiple: true
 
       - name: Create GitHub Release and Upload Archives
         uses: ncipollo/release-action@v1
