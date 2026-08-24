@@ -90,11 +90,11 @@ jobs:
             goos: windows
             goarch: amd64
             archive: zip
-          - name: windows-arm64
-            runner: windows-11-arm
-            goos: windows
-            goarch: arm64
-            archive: zip
+          # windows-arm64 is intentionally omitted: cgo needs a C toolchain
+          # that targets aarch64-w64-mingw32, and stock MinGW-w64 gcc doesn't
+          # support that target. The only option today is llvm-mingw; native
+          # GNU toolchain support isn't expected until GCC 15. Revisit once
+          # that lands, or the CI runner ships llvm-mingw preinstalled.
 
     steps:
       - name: Checkout source code
