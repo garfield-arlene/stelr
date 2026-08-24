@@ -69,27 +69,22 @@ jobs:
             runner: macos-latest
             goos: darwin
             goarch: amd64
-            archive: tar.gz
           - name: macos-arm64
             runner: macos-latest
             goos: darwin
             goarch: arm64
-            archive: tar.gz
           - name: linux-amd64
             runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            archive: tar.gz
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
-            archive: tar.gz
           - name: windows-amd64
             runner: windows-latest
             goos: windows
             goarch: amd64
-            archive: zip
           # windows-arm64 is intentionally omitted: cgo needs a C toolchain
           # that targets aarch64-w64-mingw32, and stock MinGW-w64 gcc doesn't
           # support that target. The only option today is llvm-mingw; native
@@ -110,30 +105,33 @@ jobs:
         if: matrix.goos == 'linux'
         run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
 
-      - name: Build binary
+      - name: Install fyne packaging tool
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Package app
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
-        run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            go build -v -o Stelr-desktop.exe
-          else
-            go build -v -o Stelr-desktop
-          fi
+        run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop
 
-      - name: Package archive (Windows)
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path Stelr-desktop.exe -DestinationPath "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip"
-          Remove-Item Stelr-desktop.exe
+      # fyne package's own output already has proper OS icon integration
+      # (a real .app bundle on macOS, a .desktop-file-bearing tarball on
+      # Linux). Only macOS needs an extra step: its output is a directory,
+      # not a single file, so it has to be zipped to be a valid artifact/
+      # release asset. Linux's output is already a .tar.gz and Windows's is
+      # already a single .exe -- both are renamed in place, not re-archived.
+      - name: Finalize macOS app bundle
+        if: matrix.goos == 'darwin'
+        run: zip -r -y "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip" Stelr-Desktop.app
 
-      - name: Package archive (Unix)
-        if: matrix.archive != 'zip'
-        run: |
-          tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" Stelr-desktop
-          rm Stelr-desktop
+      - name: Finalize Linux package
+        if: matrix.goos == 'linux'
+        run: mv Stelr-Desktop.tar.gz "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz"
+
+      - name: Finalize Windows executable
+        if: matrix.goos == 'windows'
+        run: mv Stelr-Desktop.exe "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.exe"
 
       # --- Upload as a private, non-published build artifact ---
       - name: Upload build artifact
@@ -143,6 +141,7 @@ jobs:
           path: |
             stelr-desktop/*.tar.gz
             stelr-desktop/*.zip
+            stelr-desktop/*.exe
           retention-days: 14
 
   publish-release:
@@ -167,7 +166,7 @@ jobs:
           tag: ${{ github.event.inputs.version }}
           name: "Release ${{ github.event.inputs.version }}"
           body: "Automated multi-platform production build of Go application."
-          artifacts: "dist/*.tar.gz,dist/*.zip"
+          artifacts: "dist/*.tar.gz,dist/*.zip,dist/*.exe"
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
 
