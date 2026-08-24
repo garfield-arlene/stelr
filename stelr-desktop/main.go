@@ -1,14 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -285,7 +284,7 @@ func main() {
 			newLinks, err := getLinks(serverURL, apiToken, search)
 			if err != nil {
 				fyne.Do(func() {
-					statusLabel.SetText("Search failes: " + err.Error())
+					statusLabel.SetText("Search failed: " + err.Error())
 				})
 				return
 			}
@@ -545,7 +544,8 @@ func main() {
 		fyne.Do(func() {
 			apiToken = token
 			links = newLinks
-			
+			passwordEntry.SetText("")
+
 			statusLabel.SetText(
 			  fmt.Sprintf("Connected! %d links", len(links)),
 		)

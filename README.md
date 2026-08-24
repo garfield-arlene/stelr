@@ -24,6 +24,7 @@ and approval.
 - Admin-controlled user registration and approval queue
 - REST API for programmatic access
 - Browser extension (Chrome, Edge, Firefox) to save pages or sync bookmarks, one-way or two-way
+- Desktop app (Windows, macOS, Linux) for browsing and managing your links outside the browser
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
 - Admin can change user passwords
@@ -329,6 +330,17 @@ full details.
 - **Firefox**: [available on addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/stelr-bookmark-sync/)
 - **Chrome / Edge**: not yet published — load unpacked or build with
   `package.py` per the instructions above
+
+---
+
+## Desktop App
+
+`stelr-desktop/` is a native desktop client (Windows, macOS, Linux) built
+with [Fyne](https://fyne.io) that connects to your Stelr instance via the
+same REST API as the CLI and browser extension. Log in with your username
+and password, then search, add, edit, delete, and open your saved links.
+See [`stelr-desktop/README.md`](stelr-desktop/README.md) for build and
+usage instructions.
 
 ---
 
