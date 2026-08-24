@@ -122,15 +122,18 @@ jobs:
             go build -v -o Stelr-desktop
           fi
 
-      - name: Package archive
+      - name: Package archive (Windows)
+        if: matrix.archive == 'zip'
+        shell: pwsh
         run: |
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip" Stelr-desktop.exe
-            rm Stelr-desktop.exe
-          else
-            tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" Stelr-desktop
-            rm Stelr-desktop
-          fi
+          Compress-Archive -Path Stelr-desktop.exe -DestinationPath "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip"
+          Remove-Item Stelr-desktop.exe
+
+      - name: Package archive (Unix)
+        if: matrix.archive != 'zip'
+        run: |
+          tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" Stelr-desktop
+          rm Stelr-desktop
 
       # --- Upload as a private, non-published build artifact ---
       - name: Upload build artifact
