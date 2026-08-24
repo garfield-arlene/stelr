@@ -16,10 +16,10 @@ import (
 )
 
 type Link struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-	URL string `json:"url"`
-	Rank int `json:"rank"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Rank    int    `json:"rank"`
 	GroupID string `json:"group_id"`
 }
 
@@ -59,9 +59,9 @@ func getLinks(serverURL, apiToken, search string) ([]Link, error) {
 
 func login(serverURL, username, password string) (string, error) {
 	data := map[string]string{
-		"username":username,
-		"password":password,
-		"name": "stelr-desktop",
+		"username": username,
+		"password": password,
+		"name":     "stelr-desktop",
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -100,8 +100,8 @@ func login(serverURL, username, password string) (string, error) {
 func addLink(serverURL, apiToken, title, linkURL string, rank int) error {
 	data := map[string]any{
 		"title": title,
-		"url": linkURL,
-		"rank": rank,
+		"url":   linkURL,
+		"rank":  rank,
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -116,7 +116,7 @@ func addLink(serverURL, apiToken, title, linkURL string, rank int) error {
 		url,
 		bytes.NewBuffer(jsonData),
 	)
-	
+
 	if err != nil {
 		return err
 	}
@@ -145,7 +145,7 @@ func deleteLink(serverURL, apiToken, linkID string) error {
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer " + apiToken)
+	req.Header.Set("Authorization", "Bearer "+apiToken)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -155,8 +155,8 @@ func deleteLink(serverURL, apiToken, linkID string) error {
 
 	if resp.StatusCode != http.StatusOK &&
 		resp.StatusCode != http.StatusNoContent {
-			return fmt.Errorf("delete failed: %s", resp.Status)
-		}
+		return fmt.Errorf("delete failed: %s", resp.Status)
+	}
 
 	return nil
 }
@@ -164,8 +164,8 @@ func deleteLink(serverURL, apiToken, linkID string) error {
 func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int) error {
 	data := map[string]any{
 		"title": title,
-		"url": linkURL,
-		"rank": rank,
+		"url":   linkURL,
+		"rank":  rank,
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -184,7 +184,7 @@ func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int) er
 		return err
 	}
 
-	req.Header.Set("Authorization", "Bearer " + apiToken)
+	req.Header.Set("Authorization", "Bearer "+apiToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
@@ -199,7 +199,6 @@ func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int) er
 
 	return nil
 }
-
 
 func main() {
 
@@ -234,8 +233,6 @@ func main() {
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Search bookmarks...")
 
-	
-
 	linkList := widget.NewList(
 		func() int {
 			return len(links)
@@ -243,21 +240,19 @@ func main() {
 		func() fyne.CanvasObject {
 			return widget.NewLabel("")
 		},
-		func (id widget.ListItemID, obj fyne.CanvasObject) {
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
 			label := obj.(*widget.Label)
 
 			link := links[id]
 
 			label.SetText(
 				fmt.Sprintf("%d - %s - %s",
-			      link.Rank,
-				  link.Title,
-				  link.URL,),
+					link.Rank,
+					link.Title,
+					link.URL),
 			)
 		},
 	)
-
-	
 
 	linkList.OnSelected = func(id widget.ListItemID) {
 		selectedID = int(id)
@@ -525,35 +520,35 @@ func main() {
 		statusLabel.SetText("Connecting...")
 
 		go func() {
-		token, err := login(serverURL, username, password)
-		if err != nil {
+			token, err := login(serverURL, username, password)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Login failed: " + err.Error())
+				})
+				return
+			}
+
+			newLinks, err := getLinks(serverURL, token, "")
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Could not get links: " + err.Error())
+				})
+				return
+			}
+
 			fyne.Do(func() {
-				statusLabel.SetText("Login failed: " + err.Error())
+				apiToken = token
+				links = newLinks
+				passwordEntry.SetText("")
+
+				statusLabel.SetText(
+					fmt.Sprintf("Connected! %d links", len(links)),
+				)
+
+				linkList.Refresh()
 			})
-			return
-		}
+		}()
 
-		newLinks, err := getLinks(serverURL, token, "")
-		if err != nil {
-			fyne.Do(func() {
-				statusLabel.SetText("Could not get links: " + err.Error())
-			})
-			return
-		}
-
-		fyne.Do(func() {
-			apiToken = token
-			links = newLinks
-			passwordEntry.SetText("")
-
-			statusLabel.SetText(
-			  fmt.Sprintf("Connected! %d links", len(links)),
-		)
-
-		    linkList.Refresh()
-		})
-	    }()
-		
 	})
 
 	loginArea := container.NewVBox(

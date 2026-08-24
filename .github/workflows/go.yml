@@ -20,8 +20,40 @@ on:
         type: boolean
 
 jobs:
+  lint:
+    name: Lint (gofmt + go vet)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stelr-desktop
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Go runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ github.event.inputs.go_version }}
+          cache: true
+
+      - name: Install Linux GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+
+      - name: Check gofmt formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
   build:
     name: Build & Package (${{ matrix.name }})
+    needs: lint
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
