@@ -122,22 +122,24 @@ jobs:
           GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
         run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop
 
-      - name: List packaged output (debug)
-        run: ls -la
-
       # fyne package's own output already has proper OS icon integration
       # (a real .app bundle on macOS, a .desktop-file-bearing tarball on
       # Linux). Only macOS needs an extra step: its output is a directory,
       # not a single file, so it has to be zipped to be a valid artifact/
-      # release asset. Linux's output is already a .tar.gz and Windows's is
-      # already a single .exe -- both are renamed in place, not re-archived.
+      # release asset. Windows's output is already a single .exe, just
+      # renamed. Linux's output is a .tar.xz; re-tar it as .tar.gz to match
+      # the compression used everywhere else in this workflow.
       - name: Finalize macOS app bundle
         if: matrix.goos == 'darwin'
         run: zip -r -y "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip" Stelr-Desktop.app
 
       - name: Finalize Linux package
         if: matrix.goos == 'linux'
-        run: mv Stelr-Desktop.tar.gz "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz"
+        run: |
+          mkdir -p /tmp/stelr-linux-pkg
+          tar -xJf Stelr-Desktop.tar.xz -C /tmp/stelr-linux-pkg
+          tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" -C /tmp/stelr-linux-pkg .
+          rm -rf Stelr-Desktop.tar.xz /tmp/stelr-linux-pkg
 
       - name: Finalize Windows executable
         if: matrix.goos == 'windows'
