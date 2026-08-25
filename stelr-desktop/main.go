@@ -15,6 +15,8 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -33,6 +35,20 @@ var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
+type largeTextTheme struct {
+	fyne.Theme
+}
+
+func (t *largeTextTheme) Size(name fyne.ThemeSizeName) float32 {
+	size := t.Theme.Size(name)
+
+	if name == theme.SizeNameText {
+		return size * 1.5
+	}
+
+	return size
+}
+
 func isInsecureRemote(serverURL string) bool {
 	u, err := url.Parse(serverURL)
 	if err != nil {
@@ -46,11 +62,23 @@ func isInsecureRemote(serverURL string) bool {
 		host != "127.0.0.1"
 }
 
-func getLinks(serverURL, apiToken, search string) ([]Link, error) {
+func getLinks(serverURL, apiToken, search, rankOp, rankVal string) ([]Link, error) {
+	
 	baseURL := strings.TrimRight(serverURL, "/") + "/api/links"
 
+	params := url.Values{}
+
 	if search != "" {
-		baseURL += "?q=" + url.QueryEscape(search)
+		params.Set("q", search)
+	}
+
+	if rankOp != "" && rankVal != "" {
+		params.Set("rank_op", rankOp)
+		params.Set("rank_val", rankVal)
+	}
+
+	if len(params) > 0 {
+		baseURL += "?" + params.Encode()
 	}
 
 	req, err := http.NewRequest("GET", baseURL, nil)
@@ -236,6 +264,9 @@ func main() {
 	selectedID := -1
 
 	myApp := app.New()
+	myApp.Settings().SetTheme(&largeTextTheme {
+		Theme: theme.DefaultTheme(),
+	})
 	iconResource := fyne.NewStaticResource("icon.png", iconBytes)
 	myApp.SetIcon(iconResource)
 
@@ -265,6 +296,22 @@ func main() {
 
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Search bookmarks...")
+
+	rankOpSelect := widget.NewSelect(
+		[]string{"<", "<=", "==", ">=", ">"},
+		func(value string) {
+		},
+	)
+
+	rankOpSelect.PlaceHolder = "Rank comparison"
+
+	rankFilterEntry := widget.NewEntry()
+	rankFilterEntry.SetPlaceHolder("Rank")
+
+	rankBox := container.NewGridWrap(
+		fyne.NewSize(70, rankFilterEntry.MinSize().Height),
+		rankFilterEntry,
+	)
 
 	linkList := widget.NewList(
 		func() int {
@@ -306,10 +353,22 @@ func main() {
 		}
 
 		search := searchEntry.Text
+		rankOp := rankOpSelect.Selected
+		rankVal := rankFilterEntry.Text
+
+		if rankVal != "" {
+			_, err := strconv.Atoi(rankVal)
+			if err != nil {
+				statusLabel.SetText("Rank must be a number")
+				return
+			}
+		}
+
+
 		serverURL := serverEntry.Text
 
 		go func() {
-			newLinks, err := getLinks(serverURL, apiToken, search)
+			newLinks, err := getLinks(serverURL, apiToken, search, rankOp, rankVal)
 			if err != nil {
 				fyne.Do(func() {
 					statusLabel.SetText("Search failed: " + err.Error())
@@ -337,7 +396,7 @@ func main() {
 		serverURL := serverEntry.Text
 
 		go func() {
-			newLinks, err := getLinks(serverURL, apiToken, "")
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "")
 			if err != nil {
 				fyne.Do(func() {
 					statusLabel.SetText("Could not reload bookmarks")
@@ -356,12 +415,11 @@ func main() {
 		}()
 	})
 
-	searchBar := container.NewBorder(
-		nil,
-		nil,
-		nil,
-		container.NewHBox(searchButton, clearSearchButton),
+	searchBar := container.NewVBox(
 		searchEntry,
+
+		container.NewHBox(rankOpSelect, rankBox, 
+			layout.NewSpacer(), searchButton, clearSearchButton),
 	)
 
 	editButton := widget.NewButton("Edit Bookmark", func() {
@@ -406,7 +464,7 @@ func main() {
 				return
 			}
 
-			newLinks, err := getLinks(serverURL, apiToken, "")
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "")
 			if err != nil {
 				fyne.Do(func() {
 					statusLabel.SetText("Updated, but refresh failed")
@@ -478,7 +536,7 @@ func main() {
 						return
 					}
 
-					newLinks, err := getLinks(serverURL, apiToken, "")
+					newLinks, err := getLinks(serverURL, apiToken, "", "", "")
 					if err != nil {
 						fyne.Do(func() {
 							statusLabel.SetText("Deleted, but refresh failed")
@@ -535,7 +593,7 @@ func main() {
 				return
 			}
 
-			newLinks, err := getLinks(serverURL, apiToken, "")
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "")
 			if err != nil {
 				fyne.Do(func() {
 					statusLabel.SetText("Added, but refresh failed")
@@ -578,7 +636,7 @@ func main() {
 					return
 				}
 
-				newLinks, err := getLinks(serverURL, token, "")
+				newLinks, err := getLinks(serverURL, token, "", "", "")
 				if err != nil {
 					fyne.Do(func() {
 						statusLabel.SetText("Could not get links: " + err.Error())
