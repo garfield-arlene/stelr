@@ -63,7 +63,7 @@ func isInsecureRemote(serverURL string) bool {
 }
 
 func getLinks(serverURL, apiToken, search, rankOp, rankVal string) ([]Link, error) {
-	
+
 	baseURL := strings.TrimRight(serverURL, "/") + "/api/links"
 
 	params := url.Values{}
@@ -264,7 +264,7 @@ func main() {
 	selectedID := -1
 
 	myApp := app.New()
-	myApp.Settings().SetTheme(&largeTextTheme {
+	myApp.Settings().SetTheme(&largeTextTheme{
 		Theme: theme.DefaultTheme(),
 	})
 	iconResource := fyne.NewStaticResource("icon.png", iconBytes)
@@ -364,7 +364,6 @@ func main() {
 			}
 		}
 
-
 		serverURL := serverEntry.Text
 
 		go func() {
@@ -392,9 +391,9 @@ func main() {
 
 	clearSearchButton := widget.NewButton("Clear", func() {
 		searchEntry.SetText("")
-		rankFilterEntry.SetText("0")
-		rankOpSelect.SetSelected(">=")
-        
+		rankFilterEntry.SetText("")
+		rankOpSelect.ClearSelected()
+
 		serverURL := serverEntry.Text
 
 		go func() {
@@ -420,7 +419,7 @@ func main() {
 	searchBar := container.NewVBox(
 		searchEntry,
 
-		container.NewHBox(rankOpSelect, rankBox, 
+		container.NewHBox(rankOpSelect, rankBox,
 			layout.NewSpacer(), searchButton, clearSearchButton),
 	)
 
