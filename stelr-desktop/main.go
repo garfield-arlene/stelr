@@ -416,7 +416,9 @@ func main() {
 
 	groupSelect := widget.NewSelect(
 		[]string{"No Group"},
-		func(selected string) {},
+		func(selected string) {
+			fmt.Println("Selected group:", selected)
+		},
 	)
 
 	groupSelect.SetSelected("No Group")
