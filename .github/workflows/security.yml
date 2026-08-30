@@ -1,0 +1,139 @@
+name: Security Checks
+
+# Runs on every push and pull request against whatever branch this file
+# lives on -- no workflow_dispatch here on purpose, so this never needs to
+# be registered on main. It only runs on branches that actually have this
+# file (currently just 6.0).
+on:
+  push:
+  pull_request:
+
+jobs:
+  codeql:
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+          - language: javascript-typescript
+          - language: go
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # Go is a compiled language -- CodeQL has to trace an actual build,
+      # which for stelr-desktop means the same cgo/GUI deps go vet needs.
+      - name: Install Linux GUI build dependencies
+        if: matrix.language == 'go'
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+
+      - name: Set up Go runtime
+        if: matrix.language == 'go'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+        env:
+          CGO_ENABLED: 1
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  govulncheck:
+    name: govulncheck (Go dependency CVEs)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stelr-desktop
+    # Advisory for now -- first run against existing code, not yet a merge
+    # gate. Flip this off once findings have been reviewed.
+    continue-on-error: true
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Linux GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+
+      - name: Set up Go runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        env:
+          CGO_ENABLED: 1
+        run: govulncheck ./...
+
+  gosec:
+    name: gosec (Go static analysis)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stelr-desktop
+    continue-on-error: true
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Linux GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+
+      - name: Set up Go runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        env:
+          CGO_ENABLED: 1
+        run: gosec ./...
+
+  python-security:
+    name: Python security (bandit + pip-audit)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install tools
+        run: pip install bandit pip-audit
+
+      - name: bandit (app.py, plugins/, cli/)
+        run: bandit -r app.py plugins cli
+
+      - name: pip-audit (app dependencies)
+        run: pip-audit -r requirements.txt
+
+      - name: pip-audit (CLI dependencies)
+        run: pip-audit -r cli/requirements.txt
