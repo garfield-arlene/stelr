@@ -391,6 +391,8 @@ func main() {
 
 	clearSearchButton := widget.NewButton("Clear", func() {
 		searchEntry.SetText("")
+		rankFilterEntry.SetText("")
+		rankOpSelect.ClearSelected()
 
 		serverURL := serverEntry.Text
 
