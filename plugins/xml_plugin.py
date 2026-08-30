@@ -2,6 +2,7 @@ import os
 import uuid
 import logging
 import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as DefusedET
 from typing import List, Dict, Any, Optional
 from plugins.base import StoragePlugin
 
@@ -32,7 +33,7 @@ class XmlPlugin(StoragePlugin):
             self._write(root)
         else:
             try:
-                root = ET.parse(DATA_FILE).getroot()
+                root = DefusedET.parse(DATA_FILE).getroot()
                 # Migrate older files
                 for tag in ("users", "links", "settings", "groups", "tokens"):
                     if root.find(tag) is None:
@@ -46,7 +47,7 @@ class XmlPlugin(StoragePlugin):
         mtime = os.path.getmtime(DATA_FILE)
         if self._cache is not None and self._cache_mtime == mtime:
             return self._cache
-        root = ET.parse(DATA_FILE).getroot()
+        root = DefusedET.parse(DATA_FILE).getroot()
         self._cache = root
         self._cache_mtime = mtime
         return root
