@@ -31,12 +31,85 @@ type Link struct {
 	GroupID string `json:"group_id"`
 }
 
+type Group struct {
+	ID string `json:"id"`
+	UserID string `json:"user_id"`
+	Name string `json:"name"`
+}
+
+
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
 }
 
 type largeTextTheme struct {
 	fyne.Theme
+}
+
+func getGroups(serverURL, apiToken string) ([]Group, error) {
+	url := strings.TrimRight(serverURL, "/") + "/api/groups"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get groups: %s", resp.Status)
+	}
+
+	var groups []Group
+
+	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+		return nil, err
+	}
+
+	return groups, nil
+}
+
+func createGroup(serverURL, apiToken, name string) error {
+	data := map[string]string{
+		"name":name,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	url := strings.TrimRight(serverURL, "/") + "/api/groups"
+
+	req, err := http.NewRequest(
+		"POST",
+		url,
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("could not create group: %s", resp.Status)
+	}
+
+	return nil
 }
 
 func (t *largeTextTheme) Size(name fyne.ThemeSizeName) float32 {
@@ -283,7 +356,20 @@ func main() {
 	statusLabel := widget.NewLabel("")
 
 	var links []Link
+	var groups []Group
 	var apiToken string
+
+	groupNameEntry := widget.NewEntry()
+	groupNameEntry.SetPlaceHolder("Work")
+
+	groupSelect := widget.NewSelect(
+		[]string{"No Group"},
+		func(selected string) {
+			fmt.Println("Selected group:", selected)
+		},
+	)
+
+	groupSelect.SetSelected("No Group")
 
 	titleEntry := widget.NewEntry()
 	titleEntry.SetPlaceHolder("GitHub")
@@ -422,6 +508,56 @@ func main() {
 		container.NewHBox(rankOpSelect, rankBox,
 			layout.NewSpacer(), searchButton, clearSearchButton),
 	)
+
+	createGroupButton := widget.NewButton("Create Group", func() {
+		if apiToken == "" {
+			statusLabel.SetText("Connect first")
+			return
+		}
+
+		name := strings.TrimSpace(groupNameEntry.Text)
+
+		if name == "" {
+			statusLabel.SetText("Enter a group name")
+			return
+		}
+
+		serverURL := serverEntry.Text
+
+		go func() {
+			err := createGroup(serverURL, apiToken, name)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText(err.Error())
+				})
+				return
+			}
+
+			newGroups, err := getGroups(serverURL, apiToken)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Group created, but refresh failed")
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				groups = newGroups
+
+				options := []string{"No Group"}
+
+				for _, group := range groups {
+					options = append(options, group.Name)
+				}
+
+				groupSelect.SetOptions(options)
+				groupSelect.Refresh()
+
+				groupNameEntry.SetText("")
+				statusLabel.SetText("Group created!")
+			})
+		}()
+	})
 
 	editButton := widget.NewButton("Edit Bookmark", func() {
 		if selectedID < 0 {
@@ -637,6 +773,15 @@ func main() {
 					return
 				}
 
+				newGroups, err := getGroups(serverURL, token)
+				if err != nil {
+					fyne.Do(func() {
+						statusLabel.SetText("Could not load groups: " + err.Error())
+					})
+					return
+				}
+				fmt.Println("Groups returned:", newGroups)
+
 				newLinks, err := getLinks(serverURL, token, "", "", "")
 				if err != nil {
 					fyne.Do(func() {
@@ -650,8 +795,24 @@ func main() {
 					links = newLinks
 					passwordEntry.SetText("")
 
+					groups = newGroups
+					options := []string{"No Group"}
+
+					for _, group := range groups {
+						options = append(options, group.Name)
+					}
+
+					groupSelect.SetOptions(options)
+					groupSelect.SetSelectedIndex(0)
+					groupSelect.Refresh()
+
+					fmt.Println("Select options:", groupSelect.Options)
+
 					statusLabel.SetText(
-						fmt.Sprintf("Connected! %d links", len(links)),
+						fmt.Sprintf("Connected! %d links, %d groups",
+						len(links),
+					    len(groups),
+					),
 					)
 
 					linkList.Refresh()
@@ -730,7 +891,22 @@ func main() {
 		widget.NewLabel("Rank"),
 		rankEntry,
 
+		widget.NewLabel("Group"),
+		groupSelect,
+
 		addButton,
+
+		widget.NewSeparator(),
+
+		widget.NewLabelWithStyle(
+			"Groups",
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Bold: true},
+		),
+
+		widget.NewLabel("New Group"),
+		groupNameEntry,
+		createGroupButton,
 	)
 
 	buttons := container.NewHBox(
