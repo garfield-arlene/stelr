@@ -24,42 +24,6 @@ To build a standalone binary:
 go build -o stelr-desktop .
 ```
 
-## Running a downloaded Linux build
-
-The Linux release tarball (`Stelr-desktop-*-linux-*.tar.gz`) extracts to a
-`usr/local/...`-shaped layout, not a single ready-to-run folder:
-
-```
-usr/local/bin/stelr-desktop
-usr/local/share/pixmaps/com.stelr.desktop.png
-usr/local/share/applications/com.stelr.desktop.desktop
-Makefile
-```
-
-**Just want to run it?** Extract the tarball and run the binary directly —
-`./usr/local/bin/stelr-desktop` — no further setup needed. It won't have an
-icon in your taskbar/app switcher this way, since that comes from the
-`.desktop` file below, not the binary itself.
-
-**Want the icon and an app-launcher entry?** Install it with the bundled
-`Makefile`, which requires `make` (not always preinstalled on a fresh
-Linux desktop — e.g. `sudo dnf install make` on Fedora, `sudo apt install
-make` on Debian/Ubuntu):
-
-```bash
-tar -xzf Stelr-desktop-*-linux-*.tar.gz
-cd stelr-desktop
-make user-install     # installs to ~/.local, no sudo needed
-```
-
-Then launch it from your application launcher rather than the raw binary,
-so the desktop environment picks up the icon. `make user-uninstall` reverses
-it; `sudo make install`/`sudo make uninstall` do the same system-wide.
-
-macOS and Windows builds don't have this extra step — the macOS `.zip`
-contains a ready `.app` bundle, and the Windows `.exe` has its icon
-embedded directly.
-
 ## Using it
 
 1. Enter your **Stelr Server URL**, **Username**, and **Password**, then click
@@ -79,7 +43,7 @@ embedded directly.
 - The API token is held in memory only for the current session — nothing is
   written to disk, so you'll need to log in again each time you start the
   app.
-- Connecting to a plain-HTTP, non-localhost server shows a warning before
-  continuing, since credentials and the API token would otherwise cross the
-  network unencrypted — same protection as the browser extension.
-- Deleting a bookmark asks for confirmation first.
+- No warning is currently shown when connecting to a plain-HTTP,
+  non-localhost server (unlike the browser extension) — avoid pointing this
+  at a server outside a network you trust until that's added.
+- Deletes happen immediately with no confirmation prompt.
