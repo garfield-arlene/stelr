@@ -52,7 +52,7 @@ jobs:
         run: go vet ./...
 
   build:
-    name: Build & Package (${{ matrix.name }})
+    name: ${{ matrix.name }}
     needs: lint
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -138,6 +138,15 @@ jobs:
         run: |
           mkdir -p /tmp/stelr-linux-pkg
           tar -xJf Stelr-Desktop.tar.xz -C /tmp/stelr-linux-pkg
+
+          # Work around a bug in fyne package's own output: it ships the
+          # icon as com.stelr.desktop.png, but the Makefile/.desktop file
+          # it generates reference it without the extension, so
+          # `make install`/`make user-install` fails with "cannot stat".
+          # Duplicate it under the extensionless name the Makefile expects.
+          pixmaps_dir="/tmp/stelr-linux-pkg/stelr-desktop/usr/local/share/pixmaps"
+          cp "$pixmaps_dir/com.stelr.desktop.png" "$pixmaps_dir/com.stelr.desktop"
+
           tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" -C /tmp/stelr-linux-pkg .
           rm -rf Stelr-Desktop.tar.xz /tmp/stelr-linux-pkg
 
