@@ -1,11 +1,16 @@
 FROM python:3.12-slim
 
+# Passed in by the container build/publish workflow, read from the
+# repo's own VERSION file -- defaults to "dev" for local `docker build`
+# so it's never left silently wrong.
+ARG VERSION=dev
+
 LABEL maintainer="stelr"
-LABEL description="Stelr v5.0.3 — URL bookmark and ranking web app"
-LABEL version="5.0.3"
+LABEL description="Stelr v${VERSION} — URL bookmark and ranking web app"
+LABEL version="${VERSION}"
 LABEL org.opencontainers.image.title="stelr"
-LABEL org.opencontainers.image.version="5.0.3"
-LABEL org.opencontainers.image.ref.name="stelr:5.0.3"
+LABEL org.opencontainers.image.version="${VERSION}"
+LABEL org.opencontainers.image.ref.name="stelr:${VERSION}"
 
 ENV DEBIAN_FRONTEND=noninteractive
 

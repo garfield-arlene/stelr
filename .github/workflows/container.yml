@@ -1,0 +1,82 @@
+name: Container Build & Publish
+
+# Explicit branch list, not a wildcard -- so pushing to an old dormant
+# version branch (5.0, 4.0, 3.0, 2.5) never auto-publishes an image.
+# When a new major version branch replaces 6.0 (e.g. 7.0), it needs to be
+# added here before anything will build/publish from it.
+on:
+  push:
+    branches: [main, "6.0"]
+  pull_request:
+    branches: [main, "6.0"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-publish:
+    name: Build & publish container image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Read app version
+        id: app_version
+        run: echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+
+      # main = an actual release; anything else (currently just 6.0) is a
+      # pre-release/working build. Filed as a channel so tag names and the
+      # embedded label stay in one place.
+      - name: Determine release channel
+        id: channel
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "value=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=pre-release" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Determine image tags
+        id: tags
+        run: |
+          image="ghcr.io/${{ github.repository_owner }}/stelr"
+          image=$(echo "$image" | tr '[:upper:]' '[:lower:]')
+          short_sha="${GITHUB_SHA::7}"
+
+          if [ "${{ steps.channel.outputs.value }}" = "release" ]; then
+            tags="$image:latest,$image:release,$image:${{ steps.app_version.outputs.value }}"
+          else
+            branch="${{ github.ref_name }}"
+            tags="$image:pre-release,$image:$branch,$image:$branch-$short_sha"
+          fi
+
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "list=$tags" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Only push on an actual push to main/6.0 -- PR builds (including
+      # from forks, which don't get secrets) validate the Dockerfile still
+      # builds but never publish anything.
+      - name: Log in to GHCR
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.tags.outputs.list }}
+          build-args: |
+            VERSION=${{ steps.app_version.outputs.value }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.app_version.outputs.value }}
+            com.stelr.release-type=${{ steps.channel.outputs.value }}
