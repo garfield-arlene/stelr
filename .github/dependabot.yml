@@ -1,0 +1,31 @@
+version: 2
+updates:
+  # Flask app dependencies
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # CLI tool dependencies
+  - package-ecosystem: "pip"
+    directory: "/cli"
+    schedule:
+      interval: "weekly"
+
+  # Desktop app (Fyne) dependencies
+  - package-ecosystem: "gomod"
+    directory: "/stelr-desktop"
+    schedule:
+      interval: "weekly"
+
+  # Base image(s) referenced in the Dockerfile
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Actions used in our own workflows (checkout, setup-go, etc.)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
