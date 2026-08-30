@@ -416,9 +416,7 @@ func main() {
 
 	groupSelect := widget.NewSelect(
 		[]string{"No Group"},
-		func(selected string) {
-			fmt.Println("Selected group:", selected)
-		},
+		func(selected string) {},
 	)
 
 	groupSelect.SetSelected("No Group")
@@ -443,8 +441,7 @@ func main() {
 
 	rankOpSelect := widget.NewSelect(
 		[]string{"<", "<=", "==", ">=", ">"},
-		func(value string) {
-		},
+		func(value string) {},
 	)
 
 	rankOpSelect.PlaceHolder = "Rank comparison"
