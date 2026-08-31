@@ -39,19 +39,20 @@ jobs:
         with:
           go-version: 'stable'
           cache: true
+          cache-dependency-path: stelr-desktop/go.sum
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
         env:
           CGO_ENABLED: 1
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -76,6 +77,7 @@ jobs:
         with:
           go-version: 'stable'
           cache: true
+          cache-dependency-path: stelr-desktop/go.sum
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -104,6 +106,7 @@ jobs:
         with:
           go-version: 'stable'
           cache: true
+          cache-dependency-path: stelr-desktop/go.sum
 
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
