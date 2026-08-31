@@ -149,6 +149,18 @@ jobs:
           pixmaps_dir="/tmp/stelr-linux-pkg/stelr-desktop/usr/local/share/pixmaps"
           cp "$pixmaps_dir/com.stelr.desktop.png" "$pixmaps_dir/com.stelr.desktop"
 
+          # Second fyne package Makefile bug: `install` (system-wide) puts
+          # the icon in .../share/pixmaps/, a flat directory icon lookup
+          # actually scans for loose icon files. `user-install` puts the
+          # *same* file in .../share/icons/ instead, which isn't a flat
+          # lookup location -- it's for hicolor-theme-structured icons only.
+          # A loose file dropped there is invisible to icon lookup, so
+          # `make user-install` "succeeds" but the app has no icon anywhere.
+          # Patch user-install/user-uninstall to match the (correct)
+          # system-wide targets.
+          sed -i 's#\.local/share/icons/\$(Icon)#.local/share/pixmaps/$(Icon)#g' \
+            /tmp/stelr-linux-pkg/stelr-desktop/Makefile
+
           tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" -C /tmp/stelr-linux-pkg .
           rm -rf Stelr-Desktop.tar.xz /tmp/stelr-linux-pkg
 
