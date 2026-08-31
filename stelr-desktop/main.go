@@ -18,6 +18,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/go-gl/glfw/v3.4/glfw"
 )
 
 //go:embed icon.png
@@ -263,7 +264,11 @@ func main() {
 
 	selectedID := -1
 
-	myApp := app.New()
+	// The ID matches what's used everywhere else in packaging (the
+	// .desktop filename, the Makefile's AppID, fyne package's -appID
+	// flag) -- but note this alone does NOT set the window's OS-level
+	// identity; see the glfw hints below for that.
+	myApp := app.NewWithID("com.stelr.desktop")
 	myApp.Settings().SetTheme(&largeTextTheme{
 		Theme: theme.DefaultTheme(),
 	})
@@ -271,6 +276,22 @@ func main() {
 	myApp.SetIcon(iconResource)
 
 	window := myApp.NewWindow("Stelr Desktop")
+
+	// Fyne itself never sets these, so GNOME can't match this *running*
+	// window back to the installed .desktop file for the dock icon --
+	// confirmed by reading Fyne's own driver source (no reference to
+	// either hint anywhere in it). The static launcher icon (Icon= in
+	// the .desktop file) is a separate, unrelated lookup and doesn't
+	// need this. Two separate hints because X11 and Wayland each have
+	// their own window-identity mechanism (WM_CLASS vs. the Wayland
+	// app_id set via xdg_toplevel_set_app_id). Safe to set here: GLFW is
+	// already initialized by NewWindow() above, and the real GLFW window
+	// isn't created until window.ShowAndRun() at the end of main(), so
+	// these hints are still in effect when that happens (verified by
+	// reading glfw's window.go: CreateWindow only calls d.init(), the
+	// actual glfw.CreateWindow() call is deferred to Show()).
+	glfw.WindowHintString(glfw.X11ClassName, "com.stelr.desktop")
+	glfw.WindowHintString(glfw.WaylandAppID, "com.stelr.desktop")
 	window.SetIcon(iconResource)
 
 	serverEntry := widget.NewEntry()
