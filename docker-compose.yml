@@ -29,7 +29,10 @@ x-app-base: &app-base
 
 x-app-env: &app-env
   ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+  # No default here on purpose -- if ADMIN_PASSWORD isn't set on the host,
+  # this passes through empty and app.py generates a random password on
+  # first run instead of falling back to a known admin/admin credential.
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
   SECRET_KEY: ${SECRET_KEY:-stelr-secret-change-me}
   SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
 

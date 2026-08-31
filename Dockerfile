@@ -39,7 +39,9 @@ ENV YAML_FILE=/data/links.yaml
 ENV HTML_FILE=/data/links.html
 ENV PYTHONPATH=/app
 ENV ADMIN_USERNAME=admin
-ENV ADMIN_PASSWORD=admin
+# No default ADMIN_PASSWORD baked in on purpose -- app.py generates a
+# random one on first run if it isn't set at container-run time, instead
+# of shipping a well-known admin/admin credential in the image itself.
 ENV SESSION_TIMEOUT_MINUTES=30
 
 EXPOSE 5000

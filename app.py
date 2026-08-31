@@ -27,7 +27,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=SESSION_TIMEOUT_MIN
 
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "xml").lower()
 ADMIN_USERNAME  = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD  = os.environ.get("ADMIN_PASSWORD", "admin")
+ADMIN_PASSWORD  = os.environ.get("ADMIN_PASSWORD")  # None if unset -- see _ensure_admin
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -72,7 +72,20 @@ def get_storage():
 def _ensure_admin(storage):
     existing = storage.get_user_by_username(ADMIN_USERNAME)
     if not existing:
-        pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
+        password = ADMIN_PASSWORD
+        if not password:
+            # No fixed default on purpose -- a well-known admin/admin
+            # credential is a real risk for a self-hosted, internet-facing
+            # app. Generate one instead and only ever show it here, once.
+            password = secrets.token_urlsafe(16)
+            logger.warning("=" * 64)
+            logger.warning(f"No ADMIN_PASSWORD set. Generated one for '{ADMIN_USERNAME}':")
+            logger.warning(f"    {password}")
+            logger.warning("This will not be shown again. If you lose it, the only")
+            logger.warning("recovery today is wiping the data volume and starting over --")
+            logger.warning("set ADMIN_PASSWORD yourself to avoid that.")
+            logger.warning("=" * 64)
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         storage.create_user(ADMIN_USERNAME, pw_hash, is_admin=True, approved=True)
         logger.info(f"Admin account '{ADMIN_USERNAME}' created.")
 

@@ -46,8 +46,14 @@ and approval.
 ## Getting Started
 
 Open **http://localhost:8082** in your browser. You will be presented with the
-login page. On first run, an admin account is created automatically using the
-credentials set in the compose file (default: `admin` / `admin`).
+login page. On first run, an admin account is created automatically. If you
+set `ADMIN_PASSWORD` (see [Configuration](#configuration)), that's the
+password; otherwise a random one is generated and printed once to the
+container logs (`podman compose logs`) — there's no fixed default, since a
+well-known admin/admin credential is a real risk for a self-hosted,
+internet-facing app. If you lose a generated password before copying it
+down, the only recovery today is wiping the data volume and starting over
+(see [Starting Stelr](#starting-stelr)).
 
 ---
 
@@ -439,7 +445,7 @@ STORAGE_BACKEND=postgresql
 |---------------------------|--------------------------|------------------------------------------|
 | `STORAGE_BACKEND`         | `xml`                    | Storage plugin to use                    |
 | `ADMIN_USERNAME`          | `admin`                  | Username for the auto-created admin      |
-| `ADMIN_PASSWORD`          | `admin`                  | Password for the auto-created admin      |
+| `ADMIN_PASSWORD`          | *(random, generated)*    | Password for the auto-created admin — set this to skip generation and use your own |
 | `SECRET_KEY`              | *(default set)*          | Flask session secret — change in production |
 | `SESSION_TIMEOUT_MINUTES` | `30`                     | Session inactivity timeout in minutes    |
 
