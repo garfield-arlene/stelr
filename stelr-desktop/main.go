@@ -416,11 +416,10 @@ func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int, gr
 
 	return nil
 }
+
 var version = "dev"
 
 func main() {
-
-	
 
 	selectedID := -1
 
