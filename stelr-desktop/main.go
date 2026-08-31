@@ -32,11 +32,10 @@ type Link struct {
 }
 
 type Group struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
 	UserID string `json:"user_id"`
-	Name string `json:"name"`
+	Name   string `json:"name"`
 }
-
 
 var httpClient = &http.Client{
 	Timeout: 10 * time.Second,
@@ -44,6 +43,86 @@ var httpClient = &http.Client{
 
 type largeTextTheme struct {
 	fyne.Theme
+}
+
+const (
+	allGroupsID = "__all__"
+	ungroupedID = "__ungrouped__"
+)
+
+func buildGroupOptions(groups []Group) ([]string, []string) {
+	nameCount := make(map[string]int)
+
+	for _, group := range groups {
+		nameCount[group.Name]++
+	}
+
+	labels := []string{"No Group"}
+	ids := []string{""}
+
+	for _, group := range groups {
+		label := group.Name
+
+		//Disambiguate duplicate names in Fyne's string-only select.
+		if nameCount[group.Name] > 1 {
+			shortID := group.ID
+			if len(shortID) > 8 {
+				shortID = shortID[:8]
+			}
+
+			label = fmt.Sprintf("%s (%s)", group.Name, shortID)
+		}
+
+		labels = append(labels, label)
+		ids = append(ids, group.ID)
+	}
+
+	return labels, ids
+}
+
+func buildGroupFilterOptions(groups []Group) ([]string, []string) {
+	labels, ids := buildGroupOptions(groups)
+
+	//Remove "No Group"
+	labels = labels[1:]
+	ids = ids[1:]
+
+	labels = append(
+		[]string{"All Groups", "Ungrouped"},
+		labels...,
+	)
+
+	ids = append(
+		[]string{allGroupsID, ungroupedID},
+		ids...,
+	)
+
+	return labels, ids
+}
+
+func selectedGroupID(selectWidget *widget.Select, ids []string) string {
+	index := selectWidget.SelectedIndex()
+
+	if index < 0 || index >= len(ids) {
+		return ""
+	}
+
+	return ids[index]
+}
+
+func selectGroupByID(
+	selectWidget *widget.Select,
+	ids []string,
+	groupID string,
+) {
+	for index, id := range ids {
+		if id == groupID {
+			selectWidget.SetSelectedIndex(index)
+			return
+		}
+	}
+
+	selectWidget.SetSelectedIndex(0)
 }
 
 func getGroups(serverURL, apiToken string) ([]Group, error) {
@@ -77,7 +156,7 @@ func getGroups(serverURL, apiToken string) ([]Group, error) {
 
 func createGroup(serverURL, apiToken, name string) error {
 	data := map[string]string{
-		"name":name,
+		"name": name,
 	}
 
 	jsonData, err := json.Marshal(data)
@@ -235,9 +314,9 @@ func login(serverURL, username, password string) (string, error) {
 
 func addLink(serverURL, apiToken, title, linkURL string, rank int, groupID string) error {
 	data := map[string]any{
-		"title": title,
-		"url":   linkURL,
-		"rank":  rank,
+		"title":    title,
+		"url":      linkURL,
+		"rank":     rank,
 		"group_id": groupID,
 	}
 
@@ -300,9 +379,9 @@ func deleteLink(serverURL, apiToken, linkID string) error {
 
 func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int, groupID string) error {
 	data := map[string]any{
-		"title": title,
-		"url":   linkURL,
-		"rank":  rank,
+		"title":    title,
+		"url":      linkURL,
+		"rank":     rank,
 		"group_id": groupID,
 	}
 
@@ -338,52 +417,6 @@ func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int, gr
 	return nil
 }
 
-func getSelectedGroupID(selected string, groups []Group) string {
-	if selected == "" || selected == "No Group" {
-		return ""
-	}
-
-	for _, group := range groups {
-		if group.Name == selected {
-			return group.ID
-		}
-	}
-
-	return ""
-}
-
-func getGroupNameByID(groupID string, groups []Group) string {
-	if groupID == "" {
-		return "No Group"
-	}
-
-	for _, group := range groups {
-		if group.ID == groupID {
-			return group.Name
-		}
-	}
-
-	return "No Group"
-}
-
-func getGroupFilter(selected string, groups []Group) string {
-	switch selected {
-	case "", "All Groups":
-		return ""
-
-	case "Ungrouped":
-		return "__ungrouped__"
-	}
-
-	for _, group := range groups {
-		if group.Name == selected {
-			return group.ID
-		}
-	}
-
-	return ""
-}
-
 func main() {
 
 	selectedID := -1
@@ -406,6 +439,13 @@ func main() {
 	passwordEntry := widget.NewPasswordEntry()
 
 	statusLabel := widget.NewLabel("")
+
+	var groupSelectIDs = []string{""}
+
+	var groupFilterIDs = []string{
+		allGroupsID,
+		ungroupedID,
+	}
 
 	var links []Link
 	var groups []Group
@@ -484,8 +524,11 @@ func main() {
 		urlEntry.SetText(link.URL)
 		rankEntry.SetText(strconv.Itoa(link.Rank))
 
-		groupName := getGroupNameByID(link.GroupID, groups)
-		groupSelect.SetSelected(groupName)
+		selectGroupByID(
+			groupSelect,
+			groupSelectIDs,
+			link.GroupID,
+		)
 
 		statusLabel.SetText("Selected: " + link.Title)
 	}
@@ -500,10 +543,14 @@ func main() {
 		rankOp := rankOpSelect.Selected
 		rankVal := rankFilterEntry.Text
 
-		groupFilter := getGroupFilter(
-			groupFilterSelect.Selected,
-			groups,
+		groupFilter := selectedGroupID(
+			groupFilterSelect,
+			groupFilterIDs,
 		)
+
+		if groupFilter == allGroupsID {
+			groupFilter = ""
+		}
 
 		if rankVal != "" {
 			_, err := strconv.Atoi(rankVal)
@@ -610,26 +657,17 @@ func main() {
 			fyne.Do(func() {
 				groups = newGroups
 
-				options := []string{"No Group"}
+				groupLabels, groupIDs := buildGroupOptions(groups)
 
-				for _, group := range groups {
-					options = append(options, group.Name)
-				}
+				groupSelectIDs = groupIDs
+				groupSelect.SetOptions(groupLabels)
+				groupSelect.SetSelectedIndex(0)
 
-				groupSelect.SetOptions(options)
-				groupSelect.Refresh()
+				filterLabels, filterIDs := buildGroupFilterOptions(groups)
 
-				filterOptions := []string{
-					"All Groups",
-					"Ungrouped",
-				}
-
-				for _, group := range groups {
-					filterOptions = append(filterOptions, group.Name)
-				}
-
-				groupFilterSelect.SetOptions(filterOptions)
-				groupFilterSelect.SetSelected("All Groups")
+				groupFilterIDs = filterIDs
+				groupFilterSelect.SetOptions(filterLabels)
+				groupFilterSelect.SetSelectedIndex(0)
 
 				groupNameEntry.SetText("")
 				statusLabel.SetText("Group created!")
@@ -660,9 +698,9 @@ func main() {
 		title := titleEntry.Text
 		linkURL := urlEntry.Text
 
-		groupID := getSelectedGroupID(
-			groupSelect.Selected,
-			groups,
+		groupID := selectedGroupID(
+			groupSelect,
+			groupSelectIDs,
 		)
 
 		statusLabel.SetText("Updating...")
@@ -784,9 +822,9 @@ func main() {
 		title := titleEntry.Text
 		linkURL := urlEntry.Text
 
-		groupID := getSelectedGroupID(
-			groupSelect.Selected,
-			groups,
+		groupID := selectedGroupID(
+			groupSelect,
+			groupSelectIDs,
 		)
 
 		rank, err := strconv.Atoi(rankEntry.Text)
@@ -865,18 +903,26 @@ func main() {
 					return
 				}
 
-				newGroups, err := getGroups(serverURL, token)
-				if err != nil {
-					fyne.Do(func() {
-						statusLabel.SetText("Could not load groups: " + err.Error())
-					})
-					return
+				newGroups, groupsErr := getGroups(serverURL, token)
+
+				if groupsErr != nil {
+					newGroups = []Group{}
 				}
 
-				newLinks, err := getLinks(serverURL, token, "", "", "", "")
+				newLinks, err := getLinks(
+					serverURL,
+					token,
+					"",
+					"",
+					"",
+					"",
+				)
+
 				if err != nil {
 					fyne.Do(func() {
-						statusLabel.SetText("Could not get links: " + err.Error())
+						statusLabel.SetText(
+							"Could not get links: " + err.Error(),
+						)
 					})
 					return
 				}
@@ -884,34 +930,39 @@ func main() {
 				fyne.Do(func() {
 					apiToken = token
 					links = newLinks
+					groups = newGroups
+
 					passwordEntry.SetText("")
 
-					groups = newGroups
-					options := []string{"No Group"}
+					groupLabels, groupIDs := buildGroupOptions(groups)
 
-					for _, group := range groups {
-						options = append(options, group.Name)
-					}
-
-					groupSelect.SetOptions(options)
+					groupSelectIDs = groupIDs
+					groupSelect.SetOptions(groupLabels)
 					groupSelect.SetSelectedIndex(0)
-					groupSelect.Refresh()
 
-					filterOptions := []string{"All Groups", "Ungrouped"}
+					filterLabels, filterIDs := buildGroupFilterOptions(groups)
 
-					for _, group := range groups {
-						filterOptions = append(filterOptions, group.Name)
+					groupFilterIDs = filterIDs
+					groupFilterSelect.SetOptions(filterLabels)
+					groupFilterSelect.SetSelectedIndex(0)
+
+					if groupsErr != nil {
+						statusLabel.SetText(
+							fmt.Sprintf(
+								"Connected! %d links. Groups unavailable: %v",
+								len(links),
+								groupsErr,
+							),
+						)
+					} else {
+						statusLabel.SetText(
+							fmt.Sprintf(
+								"Connected! %d links, %d groups",
+								len(links),
+								len(groups),
+							),
+						)
 					}
-
-					groupFilterSelect.SetOptions(filterOptions)
-					groupFilterSelect.SetSelected("All Groups")
-
-					statusLabel.SetText(
-						fmt.Sprintf("Connected! %d links, %d groups",
-						len(links),
-					    len(groups),
-					),
-					)
 
 					linkList.Refresh()
 					showLoggedIn(serverURL)
