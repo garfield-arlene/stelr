@@ -1059,7 +1059,7 @@ func main() {
 		groupNameEntry,
 		createGroupButton,
 		widget.NewSeparator(),
-		widget.NewLabel("Version: " + version),
+		widget.NewLabel("Version: "+version),
 	)
 
 	buttons := container.NewHBox(
