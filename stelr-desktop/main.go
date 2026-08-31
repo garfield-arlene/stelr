@@ -419,6 +419,8 @@ func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int, gr
 
 func main() {
 
+	var version = "dev"
+
 	selectedID := -1
 
 	myApp := app.New()
@@ -428,7 +430,7 @@ func main() {
 	iconResource := fyne.NewStaticResource("icon.png", iconBytes)
 	myApp.SetIcon(iconResource)
 
-	window := myApp.NewWindow("Stelr Desktop")
+	window := myApp.NewWindow("Stelr Desktop " + version)
 	window.SetIcon(iconResource)
 
 	serverEntry := widget.NewEntry()
@@ -1056,6 +1058,8 @@ func main() {
 		widget.NewLabel("New Group"),
 		groupNameEntry,
 		createGroupButton,
+		widget.NewSeparator(),
+		widget.NewLabel("Version: " + version),
 	)
 
 	buttons := container.NewHBox(
