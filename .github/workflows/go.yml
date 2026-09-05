@@ -141,13 +141,24 @@ jobs:
           mkdir -p /tmp/stelr-linux-pkg
           tar -xJf Stelr-Desktop.tar.xz -C /tmp/stelr-linux-pkg
 
-          # Work around a bug in fyne package's own output: it ships the
-          # icon as com.stelr.desktop.png, but the Makefile/.desktop file
-          # it generates reference it without the extension, so
-          # `make install`/`make user-install` fails with "cannot stat".
-          # Duplicate it under the extensionless name the Makefile expects.
-          pixmaps_dir="/tmp/stelr-linux-pkg/stelr-desktop/usr/local/share/pixmaps"
-          cp "$pixmaps_dir/com.stelr.desktop.png" "$pixmaps_dir/com.stelr.desktop"
+          # fyne package's generated Makefile never gets the icon into a
+          # location GTK/GNOME actually resolves, regardless of install
+          # target -- verified with a real GtkIconTheme.lookup_icon() call
+          # against the as-shipped layout (returns None). The only layout
+          # confirmed (same lookup call, actually resolves) is the
+          # standard hicolor icon theme structure with the extension kept:
+          # .../icons/hicolor/512x512/apps/com.stelr.desktop.png, matching
+          # the icon's real 512x512 size. Rewrite both install targets'
+          # destinations to that path, then append .png to every
+          # remaining bare $(Icon) reference (source and destination
+          # alike) in one pass.
+          makefile=/tmp/stelr-linux-pkg/stelr-desktop/Makefile
+          sed -i \
+            -e 's#\$(DESTDIR)\$(PREFIX)/share/pixmaps/\$(Icon)#$(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            -e 's#\$(DESTDIR)\$(HOME)/\.local/share/pixmaps/\$(Icon)#$(DESTDIR)$(HOME)/.local/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            -e 's#\$(DESTDIR)\$(HOME)/\.local/share/icons/\$(Icon)#$(DESTDIR)$(HOME)/.local/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            "$makefile"
+          sed -i 's#\$(Icon)#$(Icon).png#g' "$makefile"
 
           tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" -C /tmp/stelr-linux-pkg .
           rm -rf Stelr-Desktop.tar.xz /tmp/stelr-linux-pkg
