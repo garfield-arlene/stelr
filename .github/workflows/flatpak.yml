@@ -1,14 +1,6 @@
 name: Build Flatpak Package
 
 on:
-  # TEMPORARY, again: verifying the version-injection fix the same way as
-  # the earlier round -- push-triggered since workflow_dispatch still
-  # isn't registered (needs the file on main). Revert once verified.
-  push:
-    branches: ["6.0"]
-    paths:
-      - 'stelr-desktop/**'
-      - '.github/workflows/flatpak.yml'
   workflow_dispatch:
     inputs:
       version:
