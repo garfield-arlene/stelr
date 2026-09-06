@@ -48,7 +48,12 @@ jobs:
           if [ "${{ steps.channel.outputs.value }}" = "release" ]; then
             tags="$image:latest,$image:release,$image:${{ steps.app_version.outputs.value }}"
           else
-            branch="${{ github.ref_name }}"
+            # On a pull_request event, ref_name is "<PR#>/merge" (the PR's
+            # merge-preview ref, not a real branch) -- the "/" makes it an
+            # invalid Docker tag outright. head_ref holds the actual source
+            # branch name (e.g. "go-update") for PR events, and is unset on
+            # push, where ref_name is already the real branch.
+            branch="${{ github.head_ref || github.ref_name }}"
             tags="$image:pre-release,$image:$branch,$image:$branch-$short_sha"
           fi
 
