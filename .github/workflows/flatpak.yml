@@ -1,6 +1,16 @@
 name: Build Flatpak Package
 
 on:
+  # TEMPORARY: workflow_dispatch only runs workflows that already exist on
+  # the default branch (main), and this one doesn't yet -- so it can't be
+  # manually dispatched from 6.0 right now. Building on push to 6.0 instead
+  # is a one-off way to get a downloadable bundle without touching main.
+  # Revert this trigger back to workflow_dispatch-only once that's settled.
+  push:
+    branches: ["6.0"]
+    paths:
+      - 'stelr-desktop/**'
+      - '.github/workflows/flatpak.yml'
   workflow_dispatch:
     inputs:
       version:
@@ -35,11 +45,22 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      # Falls back to a dev/sha-based label on the temporary push trigger,
+      # where there's no version input to read.
+      - name: Determine build version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: stelr-desktop/flatpak/com.stelr.desktop.yml
-          bundle: stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.arch }}.flatpak
+          bundle: stelr-desktop-${{ steps.version.outputs.value }}-${{ matrix.arch }}.flatpak
           arch: ${{ matrix.arch }}
           cache-key: flatpak-builder-${{ matrix.arch }}-${{ hashFiles('stelr-desktop/go.sum', 'stelr-desktop/flatpak/generated-sources.yml') }}
           # Bundle filename already encodes the arch; skip the action's
