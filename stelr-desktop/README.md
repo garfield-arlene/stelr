@@ -60,19 +60,36 @@ macOS and Windows builds don't have this extra step — the macOS `.zip`
 contains a ready `.app` bundle, and the Windows `.exe` has its icon
 embedded directly.
 
+## Installing via Flatpak (Linux)
+
+As an alternative to the tarball above, a native Flatpak package
+(`stelr-desktop-*.flatpak`) is built from [`flatpak/com.stelr.desktop.yml`](flatpak/com.stelr.desktop.yml).
+It installs the icon, `.desktop` file, and AppStream metadata automatically —
+no `make install` step needed:
+
+```bash
+flatpak install --user --bundle stelr-desktop-*.flatpak
+```
+
+Launch it from your application launcher, or `flatpak run com.stelr.desktop`.
+Uninstall with `flatpak uninstall com.stelr.desktop`.
+
 ## Using it
 
 1. Enter your **Stelr Server URL**, **Username**, and **Password**, then click
    **Connect**. This exchanges your credentials for an API token, the same
    way the [CLI](../README.md#cli-tool) does — your password itself isn't
    stored anywhere.
-2. Your links load automatically on connect. Use the search bar to filter by
-   title or URL, or **Clear** to reset.
+2. Your links (and groups) load automatically on connect. Use the search bar
+   to filter by title or URL, or **Clear** to reset.
 3. Select a link in the list to load it into the **Title**/**URL**/**Rank**
    fields above, then use **Open Bookmark**, **Edit Bookmark**, or **Delete
    bookmark**.
-4. Fill in **Title**, **URL**, and **Rank** and click **Add Bookmark** to
-   create a new link.
+4. Fill in **Title**, **URL**, and **Rank**, pick a **Group** (or leave it
+   "No Group"), and click **Add Bookmark** to create a new link.
+5. Use the group filter dropdown above the search results to narrow the list
+   to "All Groups", "Ungrouped", or a specific group. Use the **Groups**
+   panel's **New Group** field and **Create Group** button to add a group.
 
 ## Notes
 
@@ -83,3 +100,8 @@ embedded directly.
   continuing, since credentials and the API token would otherwise cross the
   network unencrypted — same protection as the browser extension.
 - Deleting a bookmark asks for confirmation first.
+- The window title and a **Version** label in the Groups panel show the
+  app's version, embedded at build time.
+- If groups can't be fetched (e.g. an older Stelr server without group
+  support), Connect still succeeds with an empty group list rather than
+  failing outright — a status message calls out the degraded state.

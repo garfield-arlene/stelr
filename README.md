@@ -11,6 +11,10 @@ and approval.
 
 ## New features and bug fixes
 
+- **Desktop app now available for Windows, macOS, and Linux** — including a native Flatpak package on Linux, alongside the existing tarball/`make install` option
+- Desktop app: added group support — organize bookmarks into folders and filter by group, matching the web UI
+- Desktop app: the window title and a status label now show the app's version
+- Desktop app (Linux): fixed the app icon not appearing in the dock, taskbar, or app switcher
 - Browser extension: required opt-in warning before connecting to a plain-HTTP, non-localhost Stelr server, since credentials and the API token would otherwise cross the network unencrypted
 - Fixed the browser extension failing to request server permissions on Firefox versions before 128
 - Browser extension: clearer error messages when the server can't be reached, including guidance for Firefox's Local Network Access protection blocking self-hosted servers on a local network
@@ -341,12 +345,17 @@ full details.
 
 ## Desktop App
 
-`stelr-desktop/` is a native desktop client (Windows, macOS, Linux) built
-with [Fyne](https://fyne.io) that connects to your Stelr instance via the
-same REST API as the CLI and browser extension. Log in with your username
-and password, then search, add, edit, delete, and open your saved links.
-See [`stelr-desktop/README.md`](stelr-desktop/README.md) for build and
-usage instructions.
+`stelr-desktop/` is a native desktop client built with [Fyne](https://fyne.io)
+that connects to your Stelr instance via the same REST API as the CLI and
+browser extension. Log in with your username and password, then search,
+add, edit, delete, and open your saved links — with group support matching
+the web UI.
+
+Available on **Windows**, **macOS** (Intel and Apple Silicon), and **Linux**
+(x86_64 and arm64) — Linux users can install a downloaded tarball with the
+bundled `Makefile`, or via a native **Flatpak** package. See
+[`stelr-desktop/README.md`](stelr-desktop/README.md) for build and usage
+instructions.
 
 ---
 
