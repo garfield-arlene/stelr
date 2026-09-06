@@ -1,7 +1,7 @@
 version: "3.9"
 
 # ─────────────────────────────────────────────
-# Stelr v5.0.3 — docker compose
+# Stelr v6.0 — docker compose
 # Usage:
 #   XML (default):    docker compose up
 #   YAML:             docker compose --profile yaml up
@@ -20,7 +20,7 @@ version: "3.9"
 # ─────────────────────────────────────────────
 
 x-app-base: &app-base
-  image: stelr:5.0.3
+  image: stelr:6.0
   restart: unless-stopped
   ports:
     - "8082:5000"
