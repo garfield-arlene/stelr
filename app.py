@@ -19,7 +19,24 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "6.0"
+
+
+def _read_version():
+    # Reads the repo's own VERSION file rather than hardcoding a copy of
+    # it here, which drifts silently otherwise (the app.py string has
+    # been stale before). The Dockerfile COPYs VERSION alongside app.py,
+    # so this resolves the same way in the container as it does locally.
+    version_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "VERSION"
+    )
+    try:
+        with open(version_file) as f:
+            return f.read().strip()
+    except OSError:
+        return "dev"
+
+
+APP_VERSION = _read_version()
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
