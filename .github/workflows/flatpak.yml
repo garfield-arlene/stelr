@@ -1,16 +1,6 @@
 name: Build Flatpak Package
 
 on:
-  # TEMPORARY: workflow_dispatch only runs workflows that already exist on
-  # the default branch (main), and this one doesn't yet -- so it can't be
-  # manually dispatched from 6.0 right now. Building on push to 6.0 instead
-  # is a one-off way to get a downloadable bundle without touching main.
-  # Revert this trigger back to workflow_dispatch-only once that's settled.
-  push:
-    branches: ["6.0"]
-    paths:
-      - 'stelr-desktop/**'
-      - '.github/workflows/flatpak.yml'
   workflow_dispatch:
     inputs:
       version:
