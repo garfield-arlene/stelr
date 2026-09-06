@@ -435,6 +435,18 @@ func main() {
 	iconResource := fyne.NewStaticResource("icon.png", iconBytes)
 	myApp.SetIcon(iconResource)
 
+	// go.yml's `fyne package --app-version` sets this via a generated
+	// app.SetMetadata() call, entirely separate from -ldflags -- but
+	// fyne.io/fyne/v2/app defaults Metadata().Version to the literal
+	// string "0.0.1" (verified in its source) when nothing sets it, not
+	// "". So "0.0.1" is the real sentinel for "fyne package didn't run",
+	// not emptiness. That's the flatpak build's raw `go build` path,
+	// which instead sets the package-level `version` var above via
+	// -ldflags -X main.version=... (see flatpak.yml).
+	if metaVersion := myApp.Metadata().Version; metaVersion != "0.0.1" {
+		version = metaVersion
+	}
+
 	window := myApp.NewWindow("Stelr Desktop " + version)
 
 	// Fyne itself never sets these, so GNOME can't match this *running*

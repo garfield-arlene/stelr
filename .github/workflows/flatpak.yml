@@ -35,8 +35,9 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Falls back to a dev/sha-based label on the temporary push trigger,
-      # where there's no version input to read.
+      # Defensive fallback to a dev/sha-based label -- workflow_dispatch
+      # always requires this input, but this keeps the build filename sane
+      # if that ever isn't true (e.g. a future non-dispatch trigger).
       - name: Determine build version
         id: version
         run: |
@@ -45,6 +46,18 @@ jobs:
           else
             echo "value=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
+
+      # This manifest does a raw `go build` (no `fyne package` involved,
+      # so none of go.yml's app.SetMetadata()-based version injection
+      # applies here) -- bake the version into main.go's package-level
+      # `version` var via -ldflags -X instead, same as any other Go
+      # version-stamping setup. Patches the checked-out manifest copy
+      # only; nothing is committed back.
+      - name: Inject version into flatpak manifest
+        run: |
+          sed -i \
+            's|go build -v -o stelr-desktop \.|go build -v -ldflags "-X main.version=${{ steps.version.outputs.value }}" -o stelr-desktop .|' \
+            stelr-desktop/flatpak/com.stelr.desktop.yml
 
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6

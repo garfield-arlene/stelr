@@ -96,6 +96,15 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      # fyne package's --app-version wants a bare "x", "x.y", or "x.y.z"
+      # semantic version -- strip the "v" this workflow's own version
+      # input otherwise carries (e.g. "v1.0.0", used as-is everywhere
+      # else here: release tag, filenames).
+      - name: Determine Fyne app-version
+        id: app_version
+        shell: bash
+        run: echo "value=$(echo '${{ github.event.inputs.version }}' | sed 's/^[vV]//')" >> "$GITHUB_OUTPUT"
+
       - name: Set up Go runtime
         uses: actions/setup-go@v5
         with:
@@ -122,7 +131,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
           GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
-        run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop
+        run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop -appVersion ${{ steps.app_version.outputs.value }}
 
       # fyne package's own output already has proper OS icon integration
       # (a real .app bundle on macOS, a .desktop-file-bearing tarball on
