@@ -19,7 +19,24 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "stelr-secret-change-me")
-APP_VERSION = "5.0.3"
+
+
+def _read_version():
+    # Reads the repo's own VERSION file rather than hardcoding a copy of
+    # it here, which drifts silently otherwise (the app.py string has
+    # been stale before). The Dockerfile COPYs VERSION alongside app.py,
+    # so this resolves the same way in the container as it does locally.
+    version_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "VERSION"
+    )
+    try:
+        with open(version_file) as f:
+            return f.read().strip()
+    except OSError:
+        return "dev"
+
+
+APP_VERSION = _read_version()
 APP_NAME = "Stelr"
 
 SESSION_TIMEOUT_MINUTES = int(os.environ.get("SESSION_TIMEOUT_MINUTES", "30"))
@@ -27,7 +44,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=SESSION_TIMEOUT_MIN
 
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "xml").lower()
 ADMIN_USERNAME  = os.environ.get("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD  = os.environ.get("ADMIN_PASSWORD", "admin")
+ADMIN_PASSWORD  = os.environ.get("ADMIN_PASSWORD")  # None if unset -- see _ensure_admin
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -72,7 +89,20 @@ def get_storage():
 def _ensure_admin(storage):
     existing = storage.get_user_by_username(ADMIN_USERNAME)
     if not existing:
-        pw_hash = bcrypt.hashpw(ADMIN_PASSWORD.encode(), bcrypt.gensalt()).decode()
+        password = ADMIN_PASSWORD
+        if not password:
+            # No fixed default on purpose -- a well-known admin/admin
+            # credential is a real risk for a self-hosted, internet-facing
+            # app. Generate one instead and only ever show it here, once.
+            password = secrets.token_urlsafe(16)
+            logger.warning("=" * 64)
+            logger.warning(f"No ADMIN_PASSWORD set. Generated one for '{ADMIN_USERNAME}':")
+            logger.warning(f"    {password}")
+            logger.warning("This will not be shown again. If you lose it, the only")
+            logger.warning("recovery today is wiping the data volume and starting over --")
+            logger.warning("set ADMIN_PASSWORD yourself to avoid that.")
+            logger.warning("=" * 64)
+        pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
         storage.create_user(ADMIN_USERNAME, pw_hash, is_admin=True, approved=True)
         logger.info(f"Admin account '{ADMIN_USERNAME}' created.")
 

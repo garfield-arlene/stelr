@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Stelr Desktop
+Comment=Save, browse, and manage your Stelr bookmarks
+Exec=stelr-desktop
+Icon=com.stelr.desktop
+Categories=Network;
+Keywords=fyne;bookmarks;stelr;
+StartupWMClass=com.stelr.desktop

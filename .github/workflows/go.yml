@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release Version (e.g., v1.0.0)'
-        required: true
-        default: 'v1.0.0'
+        description: 'Release version (e.g. v1.0.0). Leave blank to read the repo''s VERSION file instead.'
+        required: false
+        default: ''
         type: string
       go_version:
         description: 'Go version to use'
@@ -20,8 +20,66 @@ on:
         type: boolean
 
 jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.value }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # An explicit input wins (e.g. cutting a version ahead of/independent
+      # from VERSION); otherwise read the repo's own VERSION file -- the
+      # same source container.yml's release-channel image tag uses, so the
+      # desktop app and the container agree on what version this commit is.
+      # Branch name is a last-resort fallback if VERSION is ever missing.
+      - name: Resolve version
+        id: resolve
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [ -s VERSION ]; then
+            echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    name: Lint (gofmt + go vet)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: stelr-desktop
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Go runtime
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ github.event.inputs.go_version }}
+          cache: true
+          cache-dependency-path: stelr-desktop/go.sum
+
+      - name: Install Linux GUI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
+
+      - name: Check gofmt formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
   build:
-    name: Build & Package (${{ matrix.name }})
+    name: ${{ matrix.name }}
+    needs: [lint, resolve-version]
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -37,68 +95,110 @@ jobs:
             runner: macos-latest
             goos: darwin
             goarch: amd64
-            archive: tar.gz
           - name: macos-arm64
             runner: macos-latest
             goos: darwin
             goarch: arm64
-            archive: tar.gz
           - name: linux-amd64
             runner: ubuntu-latest
             goos: linux
             goarch: amd64
-            archive: tar.gz
           - name: linux-arm64
             runner: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
-            archive: tar.gz
           - name: windows-amd64
             runner: windows-latest
             goos: windows
             goarch: amd64
-            archive: zip
-          - name: windows-arm64
-            runner: windows-11-arm
-            goos: windows
-            goarch: arm64
-            archive: zip
+          # windows-arm64 is intentionally omitted: cgo needs a C toolchain
+          # that targets aarch64-w64-mingw32, and stock MinGW-w64 gcc doesn't
+          # support that target. The only option today is llvm-mingw; native
+          # GNU toolchain support isn't expected until GCC 15. Revisit once
+          # that lands, or the CI runner ships llvm-mingw preinstalled.
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
+      # fyne package's --app-version wants a bare "x", "x.y", or "x.y.z"
+      # semantic version -- strip a leading "v" if the resolved version
+      # has one (e.g. "v1.0.0"); a branch name like "6.0" already fits.
+      - name: Determine Fyne app-version
+        id: app_version
+        shell: bash
+        run: echo "value=$(echo '${{ needs.resolve-version.outputs.version }}' | sed 's/^[vV]//')" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go runtime
         uses: actions/setup-go@v5
         with:
           go-version: ${{ github.event.inputs.go_version }}
           cache: true
+          cache-dependency-path: stelr-desktop/go.sum
 
       - name: Install Linux GUI build dependencies
         if: matrix.goos == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+        run: sudo apt-get update && sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev wayland-protocols
 
-      - name: Build binary
+      # macOS (Tahoe+) dyld refuses to run Mach-O binaries missing an
+      # LC_UUID load command, which Go's internal linker doesn't emit;
+      # forcing external linking fixes it for both the fyne CLI tool below
+      # and the app binary fyne package builds internally.
+      - name: Install fyne packaging tool
+        env:
+          GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
+        run: go install fyne.io/tools/cmd/fyne@latest
+
+      - name: Package app
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
-        run: |
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            go build -v -o Stelr-desktop.exe
-          else
-            go build -v -o Stelr-desktop
-          fi
+          GOFLAGS: ${{ matrix.goos == 'darwin' && '-ldflags=-linkmode=external' || '' }}
+        run: fyne package -os ${{ matrix.goos }} -icon icon.png -name Stelr-Desktop -appID com.stelr.desktop -appVersion ${{ steps.app_version.outputs.value }}
 
-      - name: Package archive
+      # fyne package's own output already has proper OS icon integration
+      # (a real .app bundle on macOS, a .desktop-file-bearing tarball on
+      # Linux). Only macOS needs an extra step: its output is a directory,
+      # not a single file, so it has to be zipped to be a valid artifact/
+      # release asset. Windows's output is already a single .exe, just
+      # renamed. Linux's output is a .tar.xz; re-tar it as .tar.gz to match
+      # the compression used everywhere else in this workflow.
+      - name: Finalize macOS app bundle
+        if: matrix.goos == 'darwin'
+        run: zip -r -y "Stelr-desktop-${{ needs.resolve-version.outputs.version }}-${{ matrix.name }}.zip" Stelr-Desktop.app
+
+      - name: Finalize Linux package
+        if: matrix.goos == 'linux'
         run: |
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            zip "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.zip" Stelr-desktop.exe
-            rm Stelr-desktop.exe
-          else
-            tar -czf "Stelr-desktop-${{ github.event.inputs.version }}-${{ matrix.name }}.tar.gz" Stelr-desktop
-            rm Stelr-desktop
-          fi
+          mkdir -p /tmp/stelr-linux-pkg
+          tar -xJf Stelr-Desktop.tar.xz -C /tmp/stelr-linux-pkg
+
+          # fyne package's generated Makefile never gets the icon into a
+          # location GTK/GNOME actually resolves, regardless of install
+          # target -- verified with a real GtkIconTheme.lookup_icon() call
+          # against the as-shipped layout (returns None). The only layout
+          # confirmed (same lookup call, actually resolves) is the
+          # standard hicolor icon theme structure with the extension kept:
+          # .../icons/hicolor/512x512/apps/com.stelr.desktop.png, matching
+          # the icon's real 512x512 size. Rewrite both install targets'
+          # destinations to that path, then append .png to every
+          # remaining bare $(Icon) reference (source and destination
+          # alike) in one pass.
+          makefile=/tmp/stelr-linux-pkg/stelr-desktop/Makefile
+          sed -i \
+            -e 's#\$(DESTDIR)\$(PREFIX)/share/pixmaps/\$(Icon)#$(DESTDIR)$(PREFIX)/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            -e 's#\$(DESTDIR)\$(HOME)/\.local/share/pixmaps/\$(Icon)#$(DESTDIR)$(HOME)/.local/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            -e 's#\$(DESTDIR)\$(HOME)/\.local/share/icons/\$(Icon)#$(DESTDIR)$(HOME)/.local/share/icons/hicolor/512x512/apps/$(Icon)#g' \
+            "$makefile"
+          sed -i 's#\$(Icon)#$(Icon).png#g' "$makefile"
+
+          tar -czf "Stelr-desktop-${{ needs.resolve-version.outputs.version }}-${{ matrix.name }}.tar.gz" -C /tmp/stelr-linux-pkg .
+          rm -rf Stelr-Desktop.tar.xz /tmp/stelr-linux-pkg
+
+      - name: Finalize Windows executable
+        if: matrix.goos == 'windows'
+        run: mv Stelr-Desktop.exe "Stelr-desktop-${{ needs.resolve-version.outputs.version }}-${{ matrix.name }}.exe"
 
       # --- Upload as a private, non-published build artifact ---
       - name: Upload build artifact
@@ -108,11 +208,12 @@ jobs:
           path: |
             stelr-desktop/*.tar.gz
             stelr-desktop/*.zip
+            stelr-desktop/*.exe
           retention-days: 14
 
   publish-release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, resolve-version]
     if: ${{ inputs.publish_release }}
     runs-on: ubuntu-latest
     permissions:
@@ -129,10 +230,10 @@ jobs:
       - name: Create GitHub Release and Upload Archives
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.event.inputs.version }}
-          name: "Release ${{ github.event.inputs.version }}"
+          tag: ${{ needs.resolve-version.outputs.version }}
+          name: "Release ${{ needs.resolve-version.outputs.version }}"
           body: "Automated multi-platform production build of Go application."
-          artifacts: "dist/*.tar.gz,dist/*.zip"
+          artifacts: "dist/*.tar.gz,dist/*.zip,dist/*.exe"
           generateReleaseNotes: true
           token: ${{ secrets.GITHUB_TOKEN }}
 

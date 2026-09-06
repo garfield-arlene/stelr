@@ -1,0 +1,1119 @@
+package main
+
+import (
+	"bytes"
+	_ "embed"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+	"github.com/go-gl/glfw/v3.4/glfw"
+)
+
+//go:embed icon.png
+var iconBytes []byte
+
+type Link struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Rank    int    `json:"rank"`
+	GroupID string `json:"group_id"`
+}
+
+type Group struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+}
+
+var httpClient = &http.Client{
+	Timeout: 10 * time.Second,
+}
+
+type largeTextTheme struct {
+	fyne.Theme
+}
+
+const (
+	allGroupsID = "__all__"
+	ungroupedID = "__ungrouped__"
+)
+
+func buildGroupOptions(groups []Group) ([]string, []string) {
+	nameCount := make(map[string]int)
+
+	for _, group := range groups {
+		nameCount[group.Name]++
+	}
+
+	labels := []string{"No Group"}
+	ids := []string{""}
+
+	for _, group := range groups {
+		label := group.Name
+
+		//Disambiguate duplicate names in Fyne's string-only select.
+		if nameCount[group.Name] > 1 {
+			shortID := group.ID
+			if len(shortID) > 8 {
+				shortID = shortID[:8]
+			}
+
+			label = fmt.Sprintf("%s (%s)", group.Name, shortID)
+		}
+
+		labels = append(labels, label)
+		ids = append(ids, group.ID)
+	}
+
+	return labels, ids
+}
+
+func buildGroupFilterOptions(groups []Group) ([]string, []string) {
+	labels, ids := buildGroupOptions(groups)
+
+	//Remove "No Group"
+	labels = labels[1:]
+	ids = ids[1:]
+
+	labels = append(
+		[]string{"All Groups", "Ungrouped"},
+		labels...,
+	)
+
+	ids = append(
+		[]string{allGroupsID, ungroupedID},
+		ids...,
+	)
+
+	return labels, ids
+}
+
+func selectedGroupID(selectWidget *widget.Select, ids []string) string {
+	index := selectWidget.SelectedIndex()
+
+	if index < 0 || index >= len(ids) {
+		return ""
+	}
+
+	return ids[index]
+}
+
+func selectGroupByID(
+	selectWidget *widget.Select,
+	ids []string,
+	groupID string,
+) {
+	for index, id := range ids {
+		if id == groupID {
+			selectWidget.SetSelectedIndex(index)
+			return
+		}
+	}
+
+	selectWidget.SetSelectedIndex(0)
+}
+
+func getGroups(serverURL, apiToken string) ([]Group, error) {
+	url := strings.TrimRight(serverURL, "/") + "/api/groups"
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get groups: %s", resp.Status)
+	}
+
+	var groups []Group
+
+	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+		return nil, err
+	}
+
+	return groups, nil
+}
+
+func createGroup(serverURL, apiToken, name string) error {
+	data := map[string]string{
+		"name": name,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	url := strings.TrimRight(serverURL, "/") + "/api/groups"
+
+	req, err := http.NewRequest(
+		"POST",
+		url,
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("could not create group: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func (t *largeTextTheme) Size(name fyne.ThemeSizeName) float32 {
+	size := t.Theme.Size(name)
+
+	if name == theme.SizeNameText {
+		return size * 1.5
+	}
+
+	return size
+}
+
+func isInsecureRemote(serverURL string) bool {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return false
+	}
+
+	host := u.Hostname()
+
+	return u.Scheme == "http" &&
+		host != "localhost" &&
+		host != "127.0.0.1"
+}
+
+func getLinks(serverURL, apiToken, search, rankOp, rankVal string, groupFilter string) ([]Link, error) {
+
+	baseURL := strings.TrimRight(serverURL, "/") + "/api/links"
+
+	params := url.Values{}
+
+	if search != "" {
+		params.Set("q", search)
+	}
+
+	if rankOp != "" && rankVal != "" {
+		params.Set("rank_op", rankOp)
+		params.Set("rank_val", rankVal)
+	}
+
+	if groupFilter != "" {
+		params.Set("group", groupFilter)
+	}
+
+	if len(params) > 0 {
+		baseURL += "?" + params.Encode()
+	}
+
+	req, err := http.NewRequest("GET", baseURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get links: %s", resp.Status)
+	}
+
+	var links []Link
+
+	err = json.NewDecoder(resp.Body).Decode(&links)
+	if err != nil {
+		return nil, err
+	}
+
+	return links, nil
+}
+
+func login(serverURL, username, password string) (string, error) {
+	data := map[string]string{
+		"username": username,
+		"password": password,
+		"name":     "stelr-desktop",
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	url := strings.TrimRight(serverURL, "/") + "/api/tokens"
+
+	req, err := http.NewRequest(
+		"POST",
+		url,
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("Login failed: %s", resp.Status)
+	}
+
+	var result struct {
+		Token string `json:"token"`
+	}
+
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	if err != nil {
+		return "", err
+	}
+
+	return result.Token, nil
+}
+
+func addLink(serverURL, apiToken, title, linkURL string, rank int, groupID string) error {
+	data := map[string]any{
+		"title":    title,
+		"url":      linkURL,
+		"rank":     rank,
+		"group_id": groupID,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	url := strings.TrimRight(serverURL, "/") + "/api/links"
+
+	req, err := http.NewRequest(
+		"POST",
+		url,
+		bytes.NewBuffer(jsonData),
+	)
+
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("could not add link: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func deleteLink(serverURL, apiToken, linkID string) error {
+	url := strings.TrimRight(serverURL, "/") + "/api/links/" + linkID
+
+	req, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK &&
+		resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("delete failed: %s", resp.Status)
+	}
+
+	return nil
+}
+
+func updateLink(serverURL, apiToken, linkID, title, linkURL string, rank int, groupID string) error {
+	data := map[string]any{
+		"title":    title,
+		"url":      linkURL,
+		"rank":     rank,
+		"group_id": groupID,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	url := strings.TrimRight(serverURL, "/") + "/api/links/" + linkID
+
+	req, err := http.NewRequest(
+		"PUT",
+		url,
+		bytes.NewBuffer(jsonData),
+	)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", "Bearer "+apiToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("Update failed: %s", resp.Status)
+	}
+
+	return nil
+}
+
+var version = "dev"
+
+func main() {
+
+	selectedID := -1
+
+	// The ID matches what's used everywhere else in packaging (the
+	// .desktop filename, the Makefile's AppID, fyne package's -appID
+	// flag) -- but note this alone does NOT set the window's OS-level
+	// identity; see the glfw hints below for that.
+	myApp := app.NewWithID("com.stelr.desktop")
+	myApp.Settings().SetTheme(&largeTextTheme{
+		Theme: theme.DefaultTheme(),
+	})
+	iconResource := fyne.NewStaticResource("icon.png", iconBytes)
+	myApp.SetIcon(iconResource)
+
+	// go.yml's `fyne package --app-version` sets this via a generated
+	// app.SetMetadata() call, entirely separate from -ldflags -- but
+	// fyne.io/fyne/v2/app defaults Metadata().Version to the literal
+	// string "0.0.1" (verified in its source) when nothing sets it, not
+	// "". So "0.0.1" is the real sentinel for "fyne package didn't run",
+	// not emptiness. That's the flatpak build's raw `go build` path,
+	// which instead sets the package-level `version` var above via
+	// -ldflags -X main.version=... (see flatpak.yml).
+	if metaVersion := myApp.Metadata().Version; metaVersion != "0.0.1" {
+		version = metaVersion
+	}
+
+	window := myApp.NewWindow("Stelr Desktop " + version)
+
+	// Fyne itself never sets these, so GNOME can't match this *running*
+	// window back to the installed .desktop file for the dock icon --
+	// confirmed by reading Fyne's own driver source (no reference to
+	// either hint anywhere in it). The static launcher icon (Icon= in
+	// the .desktop file) is a separate, unrelated lookup and doesn't
+	// need this. Two separate hints because X11 and Wayland each have
+	// their own window-identity mechanism (WM_CLASS vs. the Wayland
+	// app_id set via xdg_toplevel_set_app_id). Safe to set here: GLFW is
+	// already initialized by NewWindow() above, and the real GLFW window
+	// isn't created until window.ShowAndRun() at the end of main(), so
+	// these hints are still in effect when that happens (verified by
+	// reading glfw's window.go: CreateWindow only calls d.init(), the
+	// actual glfw.CreateWindow() call is deferred to Show()).
+	glfw.WindowHintString(glfw.X11ClassName, "com.stelr.desktop")
+	glfw.WindowHintString(glfw.WaylandAppID, "com.stelr.desktop")
+	window.SetIcon(iconResource)
+
+	serverEntry := widget.NewEntry()
+	serverEntry.SetPlaceHolder("http://localhost:8082")
+
+	usernameEntry := widget.NewEntry()
+
+	passwordEntry := widget.NewPasswordEntry()
+
+	statusLabel := widget.NewLabel("")
+
+	var groupSelectIDs = []string{""}
+
+	var groupFilterIDs = []string{
+		allGroupsID,
+		ungroupedID,
+	}
+
+	var links []Link
+	var groups []Group
+	var apiToken string
+
+	groupNameEntry := widget.NewEntry()
+	groupNameEntry.SetPlaceHolder("Work")
+
+	groupSelect := widget.NewSelect(
+		[]string{"No Group"},
+		func(selected string) {},
+	)
+
+	groupSelect.SetSelected("No Group")
+
+	groupFilterSelect := widget.NewSelect(
+		[]string{"All Groups", "Ungrouped"},
+		func(string) {},
+	)
+	groupFilterSelect.SetSelected("All Groups")
+
+	titleEntry := widget.NewEntry()
+	titleEntry.SetPlaceHolder("GitHub")
+
+	urlEntry := widget.NewEntry()
+	urlEntry.SetPlaceHolder("https://github.com")
+
+	rankEntry := widget.NewEntry()
+	rankEntry.SetPlaceHolder("1")
+
+	searchEntry := widget.NewEntry()
+	searchEntry.SetPlaceHolder("Search bookmarks...")
+
+	rankOpSelect := widget.NewSelect(
+		[]string{"<", "<=", "==", ">=", ">"},
+		func(value string) {},
+	)
+
+	rankOpSelect.PlaceHolder = "Rank comparison"
+
+	rankFilterEntry := widget.NewEntry()
+	rankFilterEntry.SetPlaceHolder("Rank")
+
+	rankBox := container.NewGridWrap(
+		fyne.NewSize(70, rankFilterEntry.MinSize().Height),
+		rankFilterEntry,
+	)
+
+	linkList := widget.NewList(
+		func() int {
+			return len(links)
+		},
+		func() fyne.CanvasObject {
+			return widget.NewLabel("")
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			label := obj.(*widget.Label)
+
+			link := links[id]
+
+			label.SetText(
+				fmt.Sprintf("%d - %s - %s",
+					link.Rank,
+					link.Title,
+					link.URL),
+			)
+		},
+	)
+
+	linkList.OnSelected = func(id widget.ListItemID) {
+		selectedID = int(id)
+
+		link := links[id]
+
+		titleEntry.SetText(link.Title)
+		urlEntry.SetText(link.URL)
+		rankEntry.SetText(strconv.Itoa(link.Rank))
+
+		selectGroupByID(
+			groupSelect,
+			groupSelectIDs,
+			link.GroupID,
+		)
+
+		statusLabel.SetText("Selected: " + link.Title)
+	}
+
+	searchButton := widget.NewButton("Search", func() {
+		if apiToken == "" {
+			statusLabel.SetText("Connect first")
+			return
+		}
+
+		search := searchEntry.Text
+		rankOp := rankOpSelect.Selected
+		rankVal := rankFilterEntry.Text
+
+		groupFilter := selectedGroupID(
+			groupFilterSelect,
+			groupFilterIDs,
+		)
+
+		if groupFilter == allGroupsID {
+			groupFilter = ""
+		}
+
+		if rankVal != "" {
+			_, err := strconv.Atoi(rankVal)
+			if err != nil {
+				statusLabel.SetText("Rank must be a number")
+				return
+			}
+		}
+
+		serverURL := serverEntry.Text
+
+		go func() {
+			newLinks, err := getLinks(serverURL, apiToken, search, rankOp, rankVal, groupFilter)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Search failed: " + err.Error())
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				links = newLinks
+				selectedID = -1
+
+				linkList.UnselectAll()
+				linkList.Refresh()
+
+				statusLabel.SetText(
+					fmt.Sprintf("%d bookmarks found", len(links)),
+				)
+			})
+		}()
+	})
+
+	clearSearchButton := widget.NewButton("Clear", func() {
+		searchEntry.SetText("")
+		rankFilterEntry.SetText("")
+		rankOpSelect.ClearSelected()
+		groupFilterSelect.SetSelected("All Groups")
+
+		serverURL := serverEntry.Text
+
+		go func() {
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "", "")
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Could not reload bookmarks")
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				links = newLinks
+				linkList.Refresh()
+
+				statusLabel.SetText(
+					fmt.Sprintf("%d bookmarks", len(links)),
+				)
+			})
+		}()
+	})
+
+	searchBar := container.NewVBox(
+		searchEntry,
+
+		groupFilterSelect,
+
+		container.NewHBox(rankOpSelect, rankBox,
+			layout.NewSpacer(), searchButton, clearSearchButton),
+	)
+
+	createGroupButton := widget.NewButton("Create Group", func() {
+		if apiToken == "" {
+			statusLabel.SetText("Connect first")
+			return
+		}
+
+		name := strings.TrimSpace(groupNameEntry.Text)
+
+		if name == "" {
+			statusLabel.SetText("Enter a group name")
+			return
+		}
+
+		serverURL := serverEntry.Text
+
+		go func() {
+			err := createGroup(serverURL, apiToken, name)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText(err.Error())
+				})
+				return
+			}
+
+			newGroups, err := getGroups(serverURL, apiToken)
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Group created, but refresh failed")
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				groups = newGroups
+
+				groupLabels, groupIDs := buildGroupOptions(groups)
+
+				groupSelectIDs = groupIDs
+				groupSelect.SetOptions(groupLabels)
+				groupSelect.SetSelectedIndex(0)
+
+				filterLabels, filterIDs := buildGroupFilterOptions(groups)
+
+				groupFilterIDs = filterIDs
+				groupFilterSelect.SetOptions(filterLabels)
+				groupFilterSelect.SetSelectedIndex(0)
+
+				groupNameEntry.SetText("")
+				statusLabel.SetText("Group created!")
+			})
+		}()
+	})
+
+	editButton := widget.NewButton("Edit Bookmark", func() {
+		if selectedID < 0 {
+			statusLabel.SetText("Select a bookmark first")
+			return
+		}
+
+		if apiToken == "" {
+			statusLabel.SetText("Connect first")
+			return
+		}
+
+		rank, err := strconv.Atoi(rankEntry.Text)
+		if err != nil {
+			statusLabel.SetText("Rank must be a number")
+			return
+		}
+
+		link := links[selectedID]
+
+		serverURL := serverEntry.Text
+		title := titleEntry.Text
+		linkURL := urlEntry.Text
+
+		groupID := selectedGroupID(
+			groupSelect,
+			groupSelectIDs,
+		)
+
+		statusLabel.SetText("Updating...")
+
+		go func() {
+			err := updateLink(
+				serverURL,
+				apiToken,
+				link.ID,
+				title,
+				linkURL,
+				rank,
+				groupID,
+			)
+
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText(err.Error())
+				})
+				return
+			}
+
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "", "")
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Updated, but refresh failed")
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				links = newLinks
+				selectedID = -1
+
+				linkList.UnselectAll()
+				linkList.Refresh()
+
+				titleEntry.SetText("")
+				urlEntry.SetText("")
+				rankEntry.SetText("")
+				groupSelect.SetSelected("No Group")
+
+				statusLabel.SetText("Bookmark updated!")
+			})
+		}()
+	})
+
+	openButton := widget.NewButton("Open Bookmark", func() {
+		if selectedID < 0 {
+			statusLabel.SetText("Select a bookmark first")
+			return
+		}
+
+		link := links[selectedID]
+
+		linkURL, err := url.Parse(link.URL)
+		if err != nil {
+			statusLabel.SetText("Invalid URL")
+			return
+		}
+
+		err = myApp.OpenURL(linkURL)
+		if err != nil {
+			statusLabel.SetText("Could not open URL")
+			return
+		}
+	})
+
+	deleteButton := widget.NewButton("Delete bookmark", func() {
+		if selectedID < 0 {
+			statusLabel.SetText("Select a bookmark first")
+			return
+		}
+
+		link := links[selectedID]
+
+		dialog.ShowConfirm(
+			"Delete Bookmark",
+			"Are you sure you want to delete \""+link.Title+"\"?",
+			func(ok bool) {
+				if !ok {
+					return
+				}
+
+				serverURL := serverEntry.Text
+
+				go func() {
+					err := deleteLink(serverURL, apiToken, link.ID)
+					if err != nil {
+						fyne.Do(func() {
+							statusLabel.SetText("Delete failed: " + err.Error())
+						})
+						return
+					}
+
+					newLinks, err := getLinks(serverURL, apiToken, "", "", "", "")
+					if err != nil {
+						fyne.Do(func() {
+							statusLabel.SetText("Deleted, but refresh failed")
+						})
+						return
+					}
+
+					fyne.Do(func() {
+						links = newLinks
+						selectedID = -1
+						linkList.UnselectAll()
+						linkList.Refresh()
+
+						statusLabel.SetText("Bookmark deleted!")
+					})
+				}()
+			},
+			window,
+		)
+	})
+
+	addButton := widget.NewButton("Add Bookmark", func() {
+		title := titleEntry.Text
+		linkURL := urlEntry.Text
+
+		groupID := selectedGroupID(
+			groupSelect,
+			groupSelectIDs,
+		)
+
+		rank, err := strconv.Atoi(rankEntry.Text)
+		if err != nil {
+			statusLabel.SetText("Rank must be a number")
+			return
+		}
+
+		if apiToken == "" {
+			statusLabel.SetText("Connect first")
+			return
+		}
+
+		serverURL := serverEntry.Text
+
+		statusLabel.SetText("Adding bookmark...")
+
+		go func() {
+			err := addLink(
+				serverURL,
+				apiToken,
+				title,
+				linkURL,
+				rank,
+				groupID,
+			)
+
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText(err.Error())
+				})
+				return
+			}
+
+			newLinks, err := getLinks(serverURL, apiToken, "", "", "", "")
+			if err != nil {
+				fyne.Do(func() {
+					statusLabel.SetText("Added, but refresh failed")
+				})
+				return
+			}
+
+			fyne.Do(func() {
+				links = newLinks
+				linkList.Refresh()
+
+				titleEntry.SetText("")
+				urlEntry.SetText("")
+				rankEntry.SetText("")
+				groupSelect.SetSelected("No Group")
+
+				statusLabel.SetText("Bookmark added!")
+			})
+		}()
+	})
+
+	connectionArea := container.NewVBox()
+
+	var showLoggedOut func()
+	var showLoggedIn func(serverURL string)
+
+	connectButton := widget.NewButton("Connect", func() {
+		serverURL := serverEntry.Text
+		username := usernameEntry.Text
+		password := passwordEntry.Text
+
+		connect := func() {
+			statusLabel.SetText("Connecting...")
+
+			go func() {
+				token, err := login(serverURL, username, password)
+				if err != nil {
+					fyne.Do(func() {
+						statusLabel.SetText("Login failed: " + err.Error())
+					})
+					return
+				}
+
+				newGroups, groupsErr := getGroups(serverURL, token)
+
+				if groupsErr != nil {
+					newGroups = []Group{}
+				}
+
+				newLinks, err := getLinks(
+					serverURL,
+					token,
+					"",
+					"",
+					"",
+					"",
+				)
+
+				if err != nil {
+					fyne.Do(func() {
+						statusLabel.SetText(
+							"Could not get links: " + err.Error(),
+						)
+					})
+					return
+				}
+
+				fyne.Do(func() {
+					apiToken = token
+					links = newLinks
+					groups = newGroups
+
+					passwordEntry.SetText("")
+
+					groupLabels, groupIDs := buildGroupOptions(groups)
+
+					groupSelectIDs = groupIDs
+					groupSelect.SetOptions(groupLabels)
+					groupSelect.SetSelectedIndex(0)
+
+					filterLabels, filterIDs := buildGroupFilterOptions(groups)
+
+					groupFilterIDs = filterIDs
+					groupFilterSelect.SetOptions(filterLabels)
+					groupFilterSelect.SetSelectedIndex(0)
+
+					if groupsErr != nil {
+						statusLabel.SetText(
+							fmt.Sprintf(
+								"Connected! %d links. Groups unavailable: %v",
+								len(links),
+								groupsErr,
+							),
+						)
+					} else {
+						statusLabel.SetText(
+							fmt.Sprintf(
+								"Connected! %d links, %d groups",
+								len(links),
+								len(groups),
+							),
+						)
+					}
+
+					linkList.Refresh()
+					showLoggedIn(serverURL)
+				})
+			}()
+		}
+
+		if isInsecureRemote(serverURL) {
+			dialog.ShowConfirm(
+				"Insecure connection",
+				"This server uses HTTP. Your username, password, and API token will not be encrypted. Continue?",
+				func(ok bool) {
+					if ok {
+						connect()
+					}
+				},
+				window,
+			)
+
+			return
+		}
+
+		connect()
+	})
+
+	showLoggedOut = func() {
+		connectionArea.Objects = []fyne.CanvasObject{
+			widget.NewLabel("Stelr Server URL"),
+			serverEntry,
+
+			widget.NewLabel("Username"),
+			usernameEntry,
+			widget.NewLabel("Password"),
+			passwordEntry,
+
+			connectButton,
+			statusLabel,
+		}
+		connectionArea.Refresh()
+	}
+
+	showLoggedIn = func(serverURL string) {
+		logoutButton := widget.NewButton("Log Out", func() {
+			apiToken = ""
+			links = nil
+			selectedID = -1
+
+			linkList.UnselectAll()
+			linkList.Refresh()
+
+			statusLabel.SetText("")
+			showLoggedOut()
+		})
+
+		connectionArea.Objects = []fyne.CanvasObject{
+			widget.NewLabel("Connected to " + serverURL),
+			logoutButton,
+			statusLabel,
+		}
+		connectionArea.Refresh()
+	}
+
+	showLoggedOut()
+
+	sidebar := container.NewVBox(
+		widget.NewLabelWithStyle("Connection", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		connectionArea,
+
+		widget.NewSeparator(),
+		widget.NewLabelWithStyle("Add Bookmark", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewLabel("Title"),
+		titleEntry,
+		widget.NewLabel("URL"),
+		urlEntry,
+		widget.NewLabel("Rank"),
+		rankEntry,
+
+		widget.NewLabel("Group"),
+		groupSelect,
+
+		addButton,
+
+		widget.NewSeparator(),
+
+		widget.NewLabelWithStyle(
+			"Groups",
+			fyne.TextAlignLeading,
+			fyne.TextStyle{Bold: true},
+		),
+
+		widget.NewLabel("New Group"),
+		groupNameEntry,
+		createGroupButton,
+		widget.NewSeparator(),
+		widget.NewLabel("Version: "+version),
+	)
+
+	buttons := container.NewHBox(
+		openButton,
+		editButton,
+		deleteButton,
+	)
+
+	mainArea := container.NewBorder(
+		searchBar,
+		buttons,
+		nil,
+		nil,
+		linkList,
+	)
+
+	split := container.NewHSplit(container.NewVScroll(sidebar), mainArea)
+	split.SetOffset(0.28)
+
+	window.SetContent(split)
+	window.Resize(fyne.NewSize(900, 600))
+
+	window.ShowAndRun()
+}

@@ -1,0 +1,112 @@
+name: Build Flatpak Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.0). Leave blank to read the repo''s VERSION file instead.'
+        required: false
+        default: ''
+        type: string
+      publish_release:
+        description: 'Publish a public GitHub Release with this bundle (leave unchecked for a private test build you can download from the run summary)'
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.value }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # An explicit input wins (e.g. cutting a version ahead of/independent
+      # from VERSION); otherwise read the repo's own VERSION file -- the
+      # same source container.yml's release-channel image tag uses, so the
+      # desktop app and the container agree on what version this commit is.
+      # Branch name is a last-resort fallback if VERSION is ever missing.
+      - name: Resolve version
+        id: resolve
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [ -s VERSION ]; then
+            echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build (${{ matrix.arch }})
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    # flatpak-builder needs bubblewrap sandboxing, which needs a container
+    # with the runtime preinstalled (matching runtime-version in the
+    # manifest) plus --privileged for the sandbox itself.
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:freedesktop-25.08
+      options: --privileged
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x86_64]
+        # aarch64 would need either an arm64 runner or QEMU user-mode
+        # emulation set up in this job -- neither is wired up yet.
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # This manifest does a raw `go build` (no `fyne package` involved,
+      # so none of go.yml's app.SetMetadata()-based version injection
+      # applies here) -- bake the version into main.go's package-level
+      # `version` var via -ldflags -X instead, same as any other Go
+      # version-stamping setup. Patches the checked-out manifest copy
+      # only; nothing is committed back.
+      - name: Inject version into flatpak manifest
+        run: |
+          sed -i \
+            's|go build -v -o stelr-desktop \.|go build -v -ldflags "-X main.version=${{ needs.resolve-version.outputs.version }}" -o stelr-desktop .|' \
+            stelr-desktop/flatpak/com.stelr.desktop.yml
+
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: stelr-desktop/flatpak/com.stelr.desktop.yml
+          bundle: stelr-desktop-${{ needs.resolve-version.outputs.version }}-${{ matrix.arch }}.flatpak
+          arch: ${{ matrix.arch }}
+          cache-key: flatpak-builder-${{ matrix.arch }}-${{ hashFiles('stelr-desktop/go.sum', 'stelr-desktop/flatpak/generated-sources.yml') }}
+          # Bundle filename already encodes the arch; skip the action's
+          # own "-<arch>" suffixing so the artifact name matches it exactly.
+          artifact-name: stelr-desktop-${{ matrix.arch }}
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build, resolve-version]
+    if: ${{ inputs.publish_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: stelr-desktop-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release and Upload Bundles
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ needs.resolve-version.outputs.version }}
+          name: "Release ${{ needs.resolve-version.outputs.version }}"
+          body: "Automated Flatpak build."
+          artifacts: "dist/*.flatpak"
+          allowUpdates: true
+          generateReleaseNotes: true
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v5.0.3** · [AGPL-3.0](LICENSE)
+**v6.0** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,6 +11,10 @@ and approval.
 
 ## New features and bug fixes
 
+- **Desktop app now available for Windows, macOS, and Linux** — including a native Flatpak package on Linux, alongside the existing tarball/`make install` option
+- Desktop app: added group support — organize bookmarks into folders and filter by group, matching the web UI
+- Desktop app: the window title and a status label now show the app's version
+- Desktop app (Linux): fixed the app icon not appearing in the dock, taskbar, or app switcher
 - Browser extension: required opt-in warning before connecting to a plain-HTTP, non-localhost Stelr server, since credentials and the API token would otherwise cross the network unencrypted
 - Fixed the browser extension failing to request server permissions on Firefox versions before 128
 - Browser extension: clearer error messages when the server can't be reached, including guidance for Firefox's Local Network Access protection blocking self-hosted servers on a local network
@@ -24,6 +28,7 @@ and approval.
 - Admin-controlled user registration and approval queue
 - REST API for programmatic access
 - Browser extension (Chrome, Edge, Firefox) to save pages or sync bookmarks, one-way or two-way
+- Desktop app (Windows, macOS, Linux) for browsing and managing your links outside the browser
 - Choice of storage backend — from simple files to full databases
 - Data is persisted across restarts via Docker volumes
 - Admin can change user passwords
@@ -45,8 +50,14 @@ and approval.
 ## Getting Started
 
 Open **http://localhost:8082** in your browser. You will be presented with the
-login page. On first run, an admin account is created automatically using the
-credentials set in the compose file (default: `admin` / `admin`).
+login page. On first run, an admin account is created automatically. If you
+set `ADMIN_PASSWORD` (see [Configuration](#configuration)), that's the
+password; otherwise a random one is generated and printed once to the
+container logs (`podman compose logs`) — there's no fixed default, since a
+well-known admin/admin credential is a real risk for a self-hosted,
+internet-facing app. If you lose a generated password before copying it
+down, the only recovery today is wiping the data volume and starting over
+(see [Starting Stelr](#starting-stelr)).
 
 ---
 
@@ -332,6 +343,22 @@ full details.
 
 ---
 
+## Desktop App
+
+`stelr-desktop/` is a native desktop client built with [Fyne](https://fyne.io)
+that connects to your Stelr instance via the same REST API as the CLI and
+browser extension. Log in with your username and password, then search,
+add, edit, delete, and open your saved links — with group support matching
+the web UI.
+
+Available on **Windows**, **macOS** (Intel and Apple Silicon), and **Linux**
+(x86_64 and arm64) — Linux users can install a downloaded tarball with the
+bundled `Makefile`, or via a native **Flatpak** package. See
+[`stelr-desktop/README.md`](stelr-desktop/README.md) for build and usage
+instructions.
+
+---
+
 ## Storage Backends
 
 Stelr supports five storage backends, selected at startup via the
@@ -427,7 +454,7 @@ STORAGE_BACKEND=postgresql
 |---------------------------|--------------------------|------------------------------------------|
 | `STORAGE_BACKEND`         | `xml`                    | Storage plugin to use                    |
 | `ADMIN_USERNAME`          | `admin`                  | Username for the auto-created admin      |
-| `ADMIN_PASSWORD`          | `admin`                  | Password for the auto-created admin      |
+| `ADMIN_PASSWORD`          | *(random, generated)*    | Password for the auto-created admin — set this to skip generation and use your own |
 | `SECRET_KEY`              | *(default set)*          | Flask session secret — change in production |
 | `SESSION_TIMEOUT_MINUTES` | `30`                     | Session inactivity timeout in minutes    |
 
