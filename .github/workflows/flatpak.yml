@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release Version (e.g., v1.0.0)'
-        required: true
-        default: 'v1.0.0'
+        description: 'Release version (e.g. v1.0.0). Leave blank for a dev/test build to use the branch name automatically (e.g. "6.0").'
+        required: false
+        default: ''
         type: string
       publish_release:
         description: 'Publish a public GitHub Release with this bundle (leave unchecked for a private test build you can download from the run summary)'
@@ -15,8 +15,27 @@ on:
         type: boolean
 
 jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.value }}
+    steps:
+      # Same fallback container.yml uses for its pre-release tags: an
+      # explicit version wins, otherwise fall back to the branch name
+      # (e.g. "6.0") so dev/test dispatches don't need one typed in.
+      - name: Resolve version
+        id: resolve
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: Build (${{ matrix.arch }})
+    needs: resolve-version
     runs-on: ubuntu-latest
     # flatpak-builder needs bubblewrap sandboxing, which needs a container
     # with the runtime preinstalled (matching runtime-version in the
@@ -35,18 +54,6 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Defensive fallback to a dev/sha-based label -- workflow_dispatch
-      # always requires this input, but this keeps the build filename sane
-      # if that ever isn't true (e.g. a future non-dispatch trigger).
-      - name: Determine build version
-        id: version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          fi
-
       # This manifest does a raw `go build` (no `fyne package` involved,
       # so none of go.yml's app.SetMetadata()-based version injection
       # applies here) -- bake the version into main.go's package-level
@@ -56,14 +63,14 @@ jobs:
       - name: Inject version into flatpak manifest
         run: |
           sed -i \
-            's|go build -v -o stelr-desktop \.|go build -v -ldflags "-X main.version=${{ steps.version.outputs.value }}" -o stelr-desktop .|' \
+            's|go build -v -o stelr-desktop \.|go build -v -ldflags "-X main.version=${{ needs.resolve-version.outputs.version }}" -o stelr-desktop .|' \
             stelr-desktop/flatpak/com.stelr.desktop.yml
 
       - name: Build Flatpak bundle
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           manifest-path: stelr-desktop/flatpak/com.stelr.desktop.yml
-          bundle: stelr-desktop-${{ steps.version.outputs.value }}-${{ matrix.arch }}.flatpak
+          bundle: stelr-desktop-${{ needs.resolve-version.outputs.version }}-${{ matrix.arch }}.flatpak
           arch: ${{ matrix.arch }}
           cache-key: flatpak-builder-${{ matrix.arch }}-${{ hashFiles('stelr-desktop/go.sum', 'stelr-desktop/flatpak/generated-sources.yml') }}
           # Bundle filename already encodes the arch; skip the action's
@@ -72,7 +79,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, resolve-version]
     if: ${{ inputs.publish_release }}
     runs-on: ubuntu-latest
     permissions:
@@ -89,8 +96,8 @@ jobs:
       - name: Create GitHub Release and Upload Bundles
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.event.inputs.version }}
-          name: "Release ${{ github.event.inputs.version }}"
+          tag: ${{ needs.resolve-version.outputs.version }}
+          name: "Release ${{ needs.resolve-version.outputs.version }}"
           body: "Automated Flatpak build."
           artifacts: "dist/*.flatpak"
           allowUpdates: true
