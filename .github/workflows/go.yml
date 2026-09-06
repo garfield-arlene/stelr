@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. v1.0.0). Leave blank for a dev/test build to use the branch name automatically (e.g. "6.0").'
+        description: 'Release version (e.g. v1.0.0). Leave blank to read the repo''s VERSION file instead.'
         required: false
         default: ''
         type: string
@@ -26,14 +26,21 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.value }}
     steps:
-      # Same fallback container.yml uses for its pre-release tags: an
-      # explicit version wins, otherwise fall back to the branch name
-      # (e.g. "6.0") so dev/test dispatches don't need one typed in.
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      # An explicit input wins (e.g. cutting a version ahead of/independent
+      # from VERSION); otherwise read the repo's own VERSION file -- the
+      # same source container.yml's release-channel image tag uses, so the
+      # desktop app and the container agree on what version this commit is.
+      # Branch name is a last-resort fallback if VERSION is ever missing.
       - name: Resolve version
         id: resolve
         run: |
           if [ -n "${{ github.event.inputs.version }}" ]; then
             echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          elif [ -s VERSION ]; then
+            echo "value=$(cat VERSION)" >> "$GITHUB_OUTPUT"
           else
             echo "value=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi
