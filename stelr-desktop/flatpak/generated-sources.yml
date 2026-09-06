@@ -112,11 +112,6 @@
   strip-components: 3
   type: archive
   url: https://proxy.golang.org/github.com/jsummers/gobmp/@v/v0.0.0-20230614200233-a9de23ed2e25.zip
-- dest: vendor/github.com/kr/text
-  sha256: 368eb318f91a5b67be905c47032ab5c31a1d49a97848b1011a0d0a2122b30ba4
-  strip-components: 3
-  type: archive
-  url: https://proxy.golang.org/github.com/kr/text/@v/v0.2.0.zip
 - dest: vendor/github.com/mattn/go-runewidth
   sha256: d517d2a2c73f75892a25c895ed40313b4906264e76a64509e3c2215800d34210
   strip-components: 3
@@ -163,25 +158,25 @@
   type: archive
   url: https://proxy.golang.org/github.com/yuin/goldmark/@v/v1.8.2.zip
 - dest: vendor/golang.org/x/image
-  sha256: 8b926b1ebae30ade6bc8ba500660284b54fef2c0d1f03e0a37e9a96ff5e02bdc
+  sha256: e6988c7fd5f3ec02ae27d07e6ae6542e0d9ed7a6844b4e6a952518eafc618d8e
   strip-components: 3
   type: archive
-  url: https://proxy.golang.org/golang.org/x/image/@v/v0.24.0.zip
+  url: https://proxy.golang.org/golang.org/x/image/@v/v0.45.0.zip
 - dest: vendor/golang.org/x/net
   sha256: 9c746c215d695e80d6f4d1b1f1d55deaae5e451b4c031223af25f2b2f0757215
   strip-components: 3
   type: archive
   url: https://proxy.golang.org/golang.org/x/net/@v/v0.35.0.zip
 - dest: vendor/golang.org/x/sys
-  sha256: f5214bfec98f00e5432da68bbece03e98600fa41594ed026556cbde8fcb6f7c9
+  sha256: cdac013ddced0262926ec29ffcda645da39670e61c7e5b761e572b6b1809bb1b
   strip-components: 3
   type: archive
-  url: https://proxy.golang.org/golang.org/x/sys/@v/v0.30.0.zip
+  url: https://proxy.golang.org/golang.org/x/sys/@v/v0.47.0.zip
 - dest: vendor/golang.org/x/text
-  sha256: 939cb4c202aa8fa302f2ba6f9d29165ce82fce9c665d9a1a0bb0d9e51b79e6f5
+  sha256: e63f35daaae749d0ffff97a295ad8f4837a662938a46b7a87f18a88e85a5cbf9
   strip-components: 3
   type: archive
-  url: https://proxy.golang.org/golang.org/x/text/@v/v0.22.0.zip
+  url: https://proxy.golang.org/golang.org/x/text/@v/v0.41.0.zip
 - dest: vendor/gopkg.in/yaml.v3
   sha256: aab8fbc4e6300ea08e6afe1caea18a21c90c79f489f52c53e2f20431f1a9a015
   strip-components: 2
