@@ -1,6 +1,14 @@
 name: Build Flatpak Package
 
 on:
+  # TEMPORARY, once more: verifying the blank-version -> branch-name
+  # fallback (resolve-version) actually reaches this workflow's own
+  # -ldflags injection end to end. Revert once confirmed.
+  push:
+    branches: ["6.0"]
+    paths:
+      - 'stelr-desktop/**'
+      - '.github/workflows/flatpak.yml'
   workflow_dispatch:
     inputs:
       version:
