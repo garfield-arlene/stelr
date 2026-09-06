@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.stelr.desktop</id>
+  <name>Stelr Desktop</name>
+  <summary>Native desktop client for Stelr bookmarks</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <description>
+    <p>
+      A native desktop client for Stelr, built with Fyne. Log in with your
+      username and password, then search, add, edit, delete, and open your
+      saved links -- the same REST API the CLI and browser extension use.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.stelr.desktop.desktop</launchable>
+  <url type="homepage">https://github.com/garfield-arlene/stelr</url>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="5.0.3" date="2026-08-31" />
+  </releases>
+</component>
