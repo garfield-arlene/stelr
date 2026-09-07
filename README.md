@@ -41,9 +41,8 @@ and approval.
 
 ## To do
 
-- User requests
-  - Add in-app links to the browser extensions (Chrome, Edge, Firefox) and desktop app downloads
 - Planned features
+  - Add in-app links to the browser extensions (Chrome, Edge, Firefox) and desktop app downloads
   - Add backgrounds or wallpapers
   - Add forgot-password / account recovery
   - Add social login (Google, Facebook, and other OAuth providers)
