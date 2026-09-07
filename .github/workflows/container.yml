@@ -54,7 +54,20 @@ jobs:
             # branch name (e.g. "go-update") for PR events, and is unset on
             # push, where ref_name is already the real branch.
             branch="${{ github.head_ref || github.ref_name }}"
-            tags="$image:pre-release,$image:$branch,$image:$branch-$short_sha"
+
+            # A real branch name can still contain "/" (dependabot's
+            # dependabot/go_modules/<path>/<dep>-<version> convention, or
+            # any nested branch like ci/foo) -- Docker tags only allow
+            # [A-Za-z0-9_.-], must start with a word char, and cap at 128
+            # chars. Replace anything else with "-", strip a leading or
+            # trailing dot/dash, cap the length (leaving room for the
+            # "-$short_sha" suffix), and fall back to a fixed label if
+            # nothing survives.
+            safe_branch="$(printf '%s' "$branch" | tr -c 'A-Za-z0-9._-' '-' | sed -E 's/^[.-]+//; s/[.-]+$//')"
+            safe_branch="${safe_branch:0:110}"
+            safe_branch="${safe_branch:-branch}"
+
+            tags="$image:pre-release,$image:$safe_branch,$image:$safe_branch-$short_sha"
           fi
 
           echo "image=$image" >> "$GITHUB_OUTPUT"
