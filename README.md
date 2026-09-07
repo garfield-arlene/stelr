@@ -44,6 +44,10 @@ and approval.
 - User requests
   - Create store accounts for Chrome and Edge
   - Upload extensions to their respective stores
+- Planned features
+  - Add backgrounds or wallpapers
+  - Add forgot-password / account recovery
+  - Add social login (Google, Facebook, and other OAuth providers)
 
 ---
 
