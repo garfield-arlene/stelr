@@ -42,8 +42,7 @@ and approval.
 ## To do
 
 - User requests
-  - Create store accounts for Chrome and Edge
-  - Upload extensions to their respective stores
+  - Add in-app links to the browser extensions (Chrome, Edge, Firefox) and desktop app downloads
 - Planned features
   - Add backgrounds or wallpapers
   - Add forgot-password / account recovery
