@@ -28,9 +28,15 @@ jobs:
     outputs:
       version: ${{ steps.resolve.outputs.value }}
       go_version: ${{ steps.resolve_go.outputs.value }}
+      version_changed: ${{ steps.version_changed.outputs.value }}
     steps:
+      # Full history, not the default shallow clone -- the VERSION-changed
+      # check below needs github.event.before to actually be present locally
+      # to diff against.
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # An explicit input wins (e.g. cutting a version ahead of/independent
       # from VERSION); otherwise read the repo's own VERSION file -- the
@@ -70,9 +76,30 @@ jobs:
             echo "value=$(grep -m1 '^go ' stelr-desktop/go.mod | awk '{print $2}')" >> "$GITHUB_OUTPUT"
           fi
 
+      # A push to main always triggers this workflow, but not every push is
+      # a version bump -- a docs-only merge shouldn't cut a 5-platform build
+      # and Release for nothing. Gate on whether VERSION itself changed.
+      # Manual workflow_dispatch runs are exempt (you asked for it, it runs).
+      - name: Check whether VERSION changed in this push
+        id: version_changed
+        run: |
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            # New branch, no prior commit to diff against.
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- VERSION; then
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          else
+            # VERSION differs, or the diff itself failed for some reason --
+            # default to running rather than silently skipping a release.
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          fi
+
   lint:
     name: Lint (gofmt + go vet)
     needs: resolve-version
+    if: ${{ needs.resolve-version.outputs.version_changed == 'true' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -106,6 +133,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     needs: [lint, resolve-version]
+    if: ${{ needs.resolve-version.outputs.version_changed == 'true' }}
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -241,9 +269,9 @@ jobs:
     name: Publish GitHub Release
     needs: [build, resolve-version]
     # workflow_dispatch respects the checkbox (default off, for private test
-    # builds); a push to main always publishes -- that's the point of the
-    # push trigger.
-    if: ${{ inputs.publish_release || github.event_name == 'push' }}
+    # builds); a push to main always publishes, but only when VERSION
+    # actually changed -- see the version_changed gate above.
+    if: ${{ (inputs.publish_release || github.event_name == 'push') && needs.resolve-version.outputs.version_changed == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
