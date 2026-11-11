@@ -5,14 +5,19 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"image/color"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
@@ -1062,6 +1067,100 @@ func main() {
 
 	showLoggedOut()
 
+	wallpaper := canvas.NewImageFromFile("")
+	wallpaper.FillMode = canvas.ImageFillContain
+	wallpaper.Hide()
+
+	wallpaperOverlay := canvas.NewRectangle(color.NRGBA{0, 0, 0, 140})
+	wallpaperOverlay.Hide()
+
+	savedWallpaper := myApp.Preferences().String("wallpaper_path")
+
+	if savedWallpaper != "" {
+		if _, err := os.Stat(savedWallpaper); err == nil {
+			wallpaper.File = savedWallpaper
+			wallpaper.Show()
+			wallpaperOverlay.Show()
+		}
+	}
+
+	removeWallpaperButton := widget.NewButton("Remove Wallpaper", func() {
+
+		savedWallpaper := myApp.Preferences().String("wallpaper_path")
+
+		if savedWallpaper != "" {
+			_ = os.Remove(savedWallpaper)
+		}
+
+		myApp.Preferences().RemoveValue("wallpaper_path")
+
+		wallpaper.File = ""
+		wallpaper.Hide()
+		wallpaperOverlay.Hide()
+		statusLabel.SetText("Wallpaper removed")
+	})
+
+	chooseWallpaperButton := widget.NewButton("Choose Wallpaper", func() {
+		dialog.ShowFileOpen(
+			func(reader fyne.URIReadCloser, err error) {
+				if err != nil {
+					statusLabel.SetText("Error opening file: " + err.Error())
+					return
+				}
+				if reader == nil {
+					return
+				}
+				defer reader.Close()
+
+				configDir, err := os.UserConfigDir()
+				if err != nil {
+					statusLabel.SetText("Error getting config directory: " + err.Error())
+					return
+				}
+				stelrDir := filepath.Join(configDir, "stelr")
+
+				if err := os.MkdirAll(stelrDir, 0755); err != nil {
+					statusLabel.SetText("Error creating config directory: " + err.Error())
+					return
+				}
+
+				oldWallpaper := myApp.Preferences().String("wallpaper_path")
+
+				if oldWallpaper != "" {
+					_ = os.Remove(oldWallpaper)
+				}
+
+				ext := filepath.Ext(reader.URI().Path())
+				savedPath := filepath.Join(stelrDir, "wallpaper"+ext)
+
+				dst, err := os.Create(savedPath)
+				if err != nil {
+					statusLabel.SetText("Error saving wallpaper: " + err.Error())
+					return
+				}
+
+				_, copyErr := io.Copy(dst, reader)
+				closeErr := dst.Close()
+
+				if copyErr != nil || closeErr != nil {
+					statusLabel.SetText("Error saving wallpaper: " + fmt.Sprintf("%v %v", copyErr, closeErr))
+					return
+				}
+
+				myApp.Preferences().SetString("wallpaper_path", savedPath)
+
+				wallpaper.File = savedPath
+				wallpaper.Show()
+				wallpaper.Refresh()
+				wallpaperOverlay.Show()
+
+				statusLabel.SetText("Wallpaper set")
+
+			},
+			window,
+		)
+	})
+
 	sidebar := container.NewVBox(
 		widget.NewLabelWithStyle("Connection", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		connectionArea,
@@ -1092,6 +1191,8 @@ func main() {
 		groupNameEntry,
 		createGroupButton,
 		widget.NewSeparator(),
+		chooseWallpaperButton,
+		removeWallpaperButton,
 		widget.NewLabel("Version: "+version),
 	)
 
@@ -1109,10 +1210,21 @@ func main() {
 		linkList,
 	)
 
-	split := container.NewHSplit(container.NewVScroll(sidebar), mainArea)
+	split := container.NewHSplit(
+		container.NewVScroll(sidebar),
+		mainArea,
+	)
+
 	split.SetOffset(0.28)
 
-	window.SetContent(split)
+	appContent := container.NewStack(
+		wallpaper,
+		wallpaperOverlay,
+		split,
+	)
+
+	window.SetContent(appContent)
+
 	window.Resize(fyne.NewSize(900, 600))
 
 	window.ShowAndRun()
