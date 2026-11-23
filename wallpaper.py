@@ -48,8 +48,9 @@ DEFAULTS = {
     "mode": "random",
     "keywords": "",
     "rotation": "daily",
-    "dim": 80,      # overlay opacity in percent
+    "dim": 60,            # overlay over the whole image, percent
     "blur": True,
+    "panel_opacity": 70,  # panel backgrounds over the image, percent
     "current": None,
 }
 
@@ -221,12 +222,18 @@ def normalize_form(form, existing: dict) -> dict:
     settings["keywords"] = ", ".join(parse_keywords(form.get("keywords", "")))
     rotation = form.get("rotation", "daily")
     settings["rotation"] = rotation if rotation in ROTATIONS else "daily"
-    try:
-        settings["dim"] = max(40, min(95, int(form.get("dim", 80))))
-    except (TypeError, ValueError):
-        settings["dim"] = 80
+    settings["dim"] = _clamp_int(form.get("dim"), 20, 95, DEFAULTS["dim"])
+    settings["panel_opacity"] = _clamp_int(form.get("panel_opacity"), 50, 100,
+                                           DEFAULTS["panel_opacity"])
     settings["blur"] = form.get("blur") in ("1", "on", "true", True)
     return settings
+
+
+def _clamp_int(value, low, high, default):
+    try:
+        return max(low, min(high, int(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 def parse_keywords(text: str) -> list:

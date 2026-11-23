@@ -159,8 +159,16 @@ Sources](#wallpaper-sources)); until then the option is greyed out.
   for each new image.
 - **Change image** — once a day (default), on every login, or only when you
   click **Next image**.
-- **Dim** and **Blur** — how strongly the image is darkened and softened, so
-  text stays easy to read. Changes preview live while the dialog is open.
+- **Dim** — how much the whole image is darkened (default 60%).
+- **Panel opacity** — how much the panels hide the image (default 70%).
+  Panels are frosted: the image shows through them, but it's blurred and
+  darkened behind each panel, so text stays readable even with a bright
+  image. At 100% the panels are solid.
+- **Blur** — softens the image itself.
+
+Changes preview live while the dialog is open. Collapsing the
+[Groups and API Tokens](#organizing-links-into-groups) panels also shows
+more of the image.
 
 The photographer and a link to the image's Pixabay page are shown in the
 bottom-right corner. Images are downloaded and served by Stelr itself, as
@@ -362,8 +370,9 @@ curl -H "Authorization: Bearer $TOKEN" "http://localhost:8082/api/wallpaper?sess
   "mode": "keywords",
   "keywords": ["mountains", "fog"],
   "rotation": "daily",
-  "dim": 80,
+  "dim": 60,
   "blur": true,
+  "panel_opacity": 70,
   "image": {
     "id": 1867616,
     "download_url": "/api/wallpaper/image/1867616",
@@ -389,7 +398,9 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://localhost:8082/api/wallpap
 
 To match the web UI, draw the image to cover the window, blur it by about 6px
 if `blur` is true, lay the background colour `#0d0f12` over it at `dim`
-percent opacity, and show `credit` linked to `page`.
+percent opacity, and show `credit` linked to `page`. Draw panels in
+`#161a1f` at `panel_opacity` percent, over a blurred (~14px) and darkened
+(~55% brightness) copy of what's behind them.
 
 - `image` is `null` when wallpaper is off, or no image could be fetched yet.
 - `error` explains a problem, such as a missing API key or Pixabay being

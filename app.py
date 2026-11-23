@@ -854,6 +854,7 @@ def _api_wallpaper_payload(storage, user_id, image, error=None):
         "rotation": settings["rotation"],
         "dim": settings["dim"],
         "blur": settings["blur"],
+        "panel_opacity": settings["panel_opacity"],
         "image": None,
         "error": error,
     }
