@@ -89,6 +89,56 @@
     .add-panel.collapsed .chevron { transform: rotate(-90deg); }
     .add-panel.collapsed h2 { margin-bottom: 0; }
     .add-panel.collapsed .panel-body { display: none; }
+    /* ── Wallpaper ── */
+    #wallpaper, #wallpaper-dim { position: fixed; inset: 0; pointer-events: none; }
+    #wallpaper { z-index: -2; background-size: cover; background-position: center;
+                 opacity: 0; transition: opacity 0.6s ease; }
+    #wallpaper.shown { opacity: 1; }
+    #wallpaper.blur { filter: blur(6px); transform: scale(1.04); }
+    #wallpaper-dim { z-index: -1; background: var(--bg); opacity: var(--wp-dim, 0.8); }
+    body.has-wallpaper .table-wrap,
+    body.has-wallpaper .container > .empty { background: var(--surface); border: 1px solid var(--border); }
+    body.has-wallpaper tbody tr:hover { background: rgba(255,255,255,0.04); }
+    /* Frosted panels: the image shows through, but whatever is behind a
+       panel is blurred and darkened first, so text keeps its contrast even
+       with a bright image and low dim. Browsers without backdrop-filter
+       keep the solid panels above. */
+    @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      body.has-wallpaper .add-panel,
+      body.has-wallpaper .table-wrap,
+      body.has-wallpaper .container > .empty,
+      body.has-wallpaper .flash-list li {
+        background: rgba(22,26,31,var(--wp-panel, 0.7));
+        -webkit-backdrop-filter: blur(14px) brightness(0.45);
+        backdrop-filter: blur(14px) brightness(0.45);
+      }
+      /* The header holds small outlined buttons; keep it nearly solid. */
+      body.has-wallpaper header {
+        background: rgba(13,15,18,0.9);
+        -webkit-backdrop-filter: blur(14px) brightness(0.45);
+        backdrop-filter: blur(14px) brightness(0.45);
+      }
+      /* Labels and hints use the muted grey; lift it a little so it keeps
+         its contrast on see-through panels. */
+      body.has-wallpaper { --muted: #7f8aa0; --border: #3a414d; }
+    }
+    .wp-credit { position: fixed; right: 0.75rem; bottom: 0.5rem; z-index: 50;
+                 font-family: var(--mono); font-size: 0.65rem; color: var(--muted);
+                 background: rgba(13,15,18,0.75); padding: 3px 8px; }
+    .wp-credit a { color: var(--muted); }
+    .wp-credit a:hover { color: var(--accent2); }
+    .modal.modal-wide { width: 440px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow-y: auto; }
+    .modal label.check-row { display: flex; align-items: center; gap: 0.5rem; cursor: pointer;
+                             text-transform: none; letter-spacing: 0; font-size: 0.8rem; color: var(--text);
+                             margin-bottom: 0; }
+    .modal .radio-row { display: flex; gap: 1.2rem; }
+    .modal .hint { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); margin-top: 0.35rem; }
+    .modal .notice { font-family: var(--mono); font-size: 0.72rem; color: var(--accent2);
+                     border-left: 3px solid var(--accent2); padding: 0.5rem 0.75rem; margin-bottom: 0.75rem;
+                     background: rgba(0,153,255,0.06); }
+    .modal input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .modal .radio-row label.check-row { margin-top: 0; }
+    .modal-actions .spacer { margin-right: auto; }
     th a.sort-link { color: inherit; text-decoration: none; }
     th a.sort-link:hover { color: var(--accent); }
     @media (max-width: 700px) { .filter-row, .group-row { grid-template-columns: 1fr; } }
@@ -154,7 +204,17 @@
     html.collapsed-tokens #tokens-panel .chevron { transform: rotate(-90deg); }
   </style>
 </head>
-<body>
+{% set wp_on = wallpaper.enabled %}
+<body class="{{ 'has-wallpaper' if wp_on }}" style="--wp-dim: {{ wallpaper.dim / 100 }}; --wp-panel: {{ wallpaper.panel_opacity / 100 }}">
+{% if wp_on %}
+<div id="wallpaper" class="{{ 'blur' if wallpaper.blur }}{{ ' shown' if wallpaper_image }}"
+     {% if wallpaper_image %}style="background-image:url('{{ url_for('wallpaper_image', image_id=wallpaper_image.id) }}')"{% endif %}></div>
+<div id="wallpaper-dim"></div>
+<div class="wp-credit" id="wp-credit" {% if not wallpaper_image %}style="display:none"{% endif %}>
+  Photo <span id="wp-credit-user">{% if wallpaper_image and wallpaper_image.user %}by {{ wallpaper_image.user }}{% endif %}</span>
+  on <a id="wp-credit-link" href="{{ wallpaper_image.page if wallpaper_image else 'https://pixabay.com/' }}" target="_blank" rel="noopener">Pixabay</a>
+</div>
+{% endif %}
 <header>
   <div class="logo">STELR</div>
   <span class="version-badge">v{{ version }}</span>
@@ -162,6 +222,7 @@
   <span class="backend-badge" title="Session timeout">⏱ {{ timeout }}m</span>
   <div class="header-right">
     <span class="user-info">logged in as <strong>{{ current_user.username }}</strong></span>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="openWallpaperModal()">Wallpaper</button>
     <button type="button" class="btn btn-warn btn-sm" onclick="openChangePasswordModal()">Change Password</button>
     {% if current_user.is_admin %}
     <a href="/admin" class="btn btn-admin btn-sm">Admin</a>
@@ -447,6 +508,87 @@
   </div>
 </div>
 
+<!-- ── Wallpaper modal ── -->
+{% set any_provider = wallpaper_providers | selectattr('configured') | list %}
+<div class="modal-overlay" id="wallpaper-modal" style="display:none">
+  <div class="modal modal-wide">
+    <h2>// Wallpaper</h2>
+    {% if not any_provider %}
+    <div class="notice">
+      Wallpapers need a Pixabay API key, which your Stelr admin adds on the
+      Admin page. Ask them to add one.
+    </div>
+    {% endif %}
+    <form method="POST" action="/wallpaper/settings" id="wallpaper-form">
+      <label class="check-row">
+        <input type="checkbox" name="enabled" value="1" {% if wallpaper.enabled %}checked{% endif %}
+               {% if not any_provider %}disabled{% endif %}>
+        Show a wallpaper behind the dashboard
+      </label>
+
+      <label for="wp-provider">Source</label>
+      <select id="wp-provider" name="provider">
+        {% for p in wallpaper_providers %}
+        <option value="{{ p.id }}" {% if wallpaper.provider == p.id %}selected{% endif %}
+                {% if not p.configured %}disabled{% endif %}>
+          {{ p.name }} ({{ p.url }}){% if not p.configured %} — not configured{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+
+      <label>Image selection</label>
+      <div class="radio-row">
+        <label class="check-row">
+          <input type="radio" name="mode" value="random" {% if wallpaper.mode != 'keywords' %}checked{% endif %}
+                 onchange="syncWallpaperForm()"> Random
+        </label>
+        <label class="check-row">
+          <input type="radio" name="mode" value="keywords" {% if wallpaper.mode == 'keywords' %}checked{% endif %}
+                 onchange="syncWallpaperForm()"> Keywords
+        </label>
+      </div>
+      <div id="wp-keywords-row">
+        <label for="wp-keywords">Keywords</label>
+        <input type="text" id="wp-keywords" name="keywords" value="{{ wallpaper.keywords }}"
+               placeholder="e.g. mountains, fog, ocean" maxlength="500">
+        <div class="hint">Comma-separated. Each new image uses one keyword, picked at random.</div>
+      </div>
+
+      <label for="wp-rotation">Change image</label>
+      <select id="wp-rotation" name="rotation">
+        <option value="daily"  {% if wallpaper.rotation == 'daily'  %}selected{% endif %}>Once a day</option>
+        <option value="login"  {% if wallpaper.rotation == 'login'  %}selected{% endif %}>Every login</option>
+        <option value="manual" {% if wallpaper.rotation == 'manual' %}selected{% endif %}>Only when I click "Next image"</option>
+      </select>
+
+      <label for="wp-dim">Dim <span id="wp-dim-value">{{ wallpaper.dim }}%</span></label>
+      <input type="range" id="wp-dim" name="dim" min="20" max="95" step="5" value="{{ wallpaper.dim }}"
+             oninput="previewWallpaperDim(this.value)">
+      <div class="hint">How much the whole image is darkened. Lower shows more of it.</div>
+
+      <label for="wp-panel">Panel opacity <span id="wp-panel-value">{{ wallpaper.panel_opacity }}%</span></label>
+      <input type="range" id="wp-panel" name="panel_opacity" min="50" max="100" step="5" value="{{ wallpaper.panel_opacity }}"
+             oninput="previewWallpaperPanel(this.value)">
+      <div class="hint">Lower lets the image show through the panels. Text behind panels stays darkened either way.</div>
+
+      <label class="check-row" style="margin-top:0.75rem">
+        <input type="checkbox" name="blur" value="1" {% if wallpaper.blur %}checked{% endif %}
+               onchange="previewWallpaperBlur(this.checked)">
+        Blur the image
+      </label>
+
+      <div class="modal-error" id="wp-error" style="display:none"></div>
+      <div class="modal-actions">
+        {% if wallpaper.enabled %}
+        <button type="button" class="btn btn-secondary btn-sm spacer" id="wp-next-btn" onclick="nextWallpaper()">Next image</button>
+        {% endif %}
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeWallpaperModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- ── API token reveal modal ── -->
 <div class="modal-overlay" id="token-reveal-modal" style="display:none">
   <div class="modal">
@@ -622,6 +764,106 @@
     form.appendChild(input);
     document.body.appendChild(form);
     form.submit();
+  }
+
+  // ── Wallpaper ──
+  const WALLPAPER_ENABLED = {{ 'true' if wallpaper.enabled else 'false' }};
+  const WALLPAPER_SAVED = { dim: {{ wallpaper.dim }}, panel: {{ wallpaper.panel_opacity }},
+                            blur: {{ 'true' if wallpaper.blur else 'false' }} };
+
+  function showWallpaper(image) {
+    const layer = document.getElementById('wallpaper');
+    if (!layer || !image) return;
+    const url = image.url;
+    const apply = function() {
+      layer.style.backgroundImage = "url('" + url + "')";
+      layer.dataset.url = url;
+      layer.classList.add('shown');
+      document.getElementById('wp-credit-user').textContent = image.user ? 'by ' + image.user : '';
+      document.getElementById('wp-credit-link').href = image.page || 'https://pixabay.com/';
+      document.getElementById('wp-credit').style.display = '';
+    };
+    if (layer.dataset.url === url) { apply(); return; }
+    // Preload so the swap is a clean fade instead of a half-drawn image.
+    const img = new Image();
+    img.onload = function() {
+      if (!layer.classList.contains('shown')) { apply(); return; }
+      layer.classList.remove('shown');
+      setTimeout(apply, 600);
+    };
+    img.src = url;
+  }
+
+  async function fetchWallpaper(next) {
+    const res = await fetch('/wallpaper/current' + (next ? '?next=1' : ''), { method: 'POST' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const layer = document.getElementById('wallpaper');
+    if (!WALLPAPER_ENABLED || !layer) return;
+    {% if wallpaper_image %}
+    layer.dataset.url = {{ url_for('wallpaper_image', image_id=wallpaper_image.id) | tojson }};
+    {% endif %}
+    fetchWallpaper(false).then(function(data) {
+      if (data.image) showWallpaper(data.image);
+      else if (data.error) console.warn('Wallpaper:', data.error);
+    }).catch(function(e) { console.warn('Wallpaper:', e); });
+  });
+
+  async function nextWallpaper() {
+    const btn = document.getElementById('wp-next-btn');
+    const err = document.getElementById('wp-error');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    err.style.display = 'none';
+    try {
+      const data = await fetchWallpaper(true);
+      if (data.image) showWallpaper(data.image);
+      else { err.textContent = data.error || 'No image available.'; err.style.display = ''; }
+    } catch (e) {
+      err.textContent = 'Could not load a new image.';
+      err.style.display = '';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Next image';
+  }
+
+  function syncWallpaperForm() {
+    const mode = document.querySelector('#wallpaper-form input[name="mode"]:checked');
+    document.getElementById('wp-keywords-row').style.display =
+      mode && mode.value === 'keywords' ? '' : 'none';
+  }
+
+  function previewWallpaperDim(value) {
+    document.getElementById('wp-dim-value').textContent = value + '%';
+    document.body.style.setProperty('--wp-dim', value / 100);
+  }
+
+  function previewWallpaperPanel(value) {
+    document.getElementById('wp-panel-value').textContent = value + '%';
+    document.body.style.setProperty('--wp-panel', value / 100);
+  }
+
+  function previewWallpaperBlur(on) {
+    const layer = document.getElementById('wallpaper');
+    if (layer) layer.classList.toggle('blur', on);
+  }
+
+  function openWallpaperModal() {
+    document.getElementById('wallpaper-form').reset();
+    document.getElementById('wp-error').style.display = 'none';
+    syncWallpaperForm();
+    document.getElementById('wallpaper-modal').style.display = 'flex';
+  }
+
+  function closeWallpaperModal() {
+    // Undo any live preview from the slider and blur toggle.
+    previewWallpaperDim(WALLPAPER_SAVED.dim);
+    previewWallpaperPanel(WALLPAPER_SAVED.panel);
+    previewWallpaperBlur(WALLPAPER_SAVED.blur);
+    document.getElementById('wallpaper-modal').style.display = 'none';
   }
 
   function openChangePasswordModal() {
