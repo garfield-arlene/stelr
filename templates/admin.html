@@ -92,7 +92,11 @@
     .modal h2 { margin-bottom: 1rem; }
     .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1.2rem; }
     .modal-error { color: var(--danger); font-family: var(--mono); font-size: 0.72rem; margin-top: 0.5rem; }
-    @media (max-width: 700px) { .form-row { grid-template-columns: 1fr; } }
+    .wp-admin-notes p { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
+    .wp-admin-notes a { color: var(--accent2); }
+    .wp-admin-notes .wp-warn { color: var(--warn); border-left: 3px solid var(--warn); padding-left: 0.75rem; }
+    .wp-key-form { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: end; max-width: 560px; }
+    @media (max-width: 700px) { .form-row, .wp-key-form { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -130,6 +134,57 @@
           {% if reg_enabled %}Disable Registration{% else %}Enable Registration{% endif %}
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- ── Wallpaper sources ── -->
+  <div class="section">
+    <div class="section-header">
+      <h2>// Wallpaper Sources</h2>
+      <span class="reg-status">
+        Pixabay:
+        {% if pixabay_key.error %}<span class="reg-off">KEY UNREADABLE</span>
+        {% elif pixabay_key.source == 'env' %}<span class="reg-on">KEY SET ({{ pixabay_key.hint }}) VIA ENVIRONMENT</span>
+        {% elif pixabay_key.source == 'db' %}<span class="reg-on">KEY SET ({{ pixabay_key.hint }}), STORED ENCRYPTED</span>
+        {% else %}<span class="reg-off">NO API KEY</span>{% endif %}
+      </span>
+    </div>
+    <div class="wp-admin-notes">
+      {% if pixabay_key.error %}
+      <p class="wp-warn">{{ pixabay_key.error }}</p>
+      {% endif %}
+      {% if pixabay_key.source == 'env' %}
+      <p>The key comes from <code>PIXABAY_API_KEY</code> in the server's environment and can't be changed here.
+         Unset it to manage the key from this page instead.</p>
+      {% elif not secret_key_strong %}
+      <p class="wp-warn">
+        To store an API key, set <code>SECRET_KEY</code> on the server to a random value of at least 32 characters
+        (e.g. <code>python3 -c "import secrets; print(secrets.token_urlsafe(48))"</code>) and recreate the container.
+        It's currently the public default, which can't protect a stored key (or user sessions).
+        Changing it logs everyone out once.
+      </p>
+      {% else %}
+      <p>Get a free key at <a href="https://pixabay.com/api/docs/" target="_blank" rel="noopener">pixabay.com/api/docs</a>.
+         It's checked with Pixabay, then stored encrypted; Stelr never shows it again or sends it to browsers.</p>
+      {% if not secure_transport %}
+      <p class="wp-warn">You're connected over plain HTTP, so the key would cross the network unencrypted when you
+         submit it. Use HTTPS (e.g. a reverse proxy), or open the admin page from the server itself.</p>
+      {% endif %}
+      <form method="POST" action="/admin/wallpaper/pixabay_key" class="wp-key-form" autocomplete="off">
+        <div>
+          <label for="pixabay-key-input">{% if pixabay_key.source == 'db' %}Replace API key{% else %}API key{% endif %}</label>
+          <input type="password" id="pixabay-key-input" name="api_key" required autocomplete="off"
+                 spellcheck="false" placeholder="Paste your Pixabay API key">
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Verify &amp; Save</button>
+      </form>
+      {% endif %}
+      {% if pixabay_key.source == 'db' %}
+      <form method="POST" action="/admin/wallpaper/pixabay_key/delete" style="margin-top:0.75rem"
+            onsubmit="return confirm('Remove the stored Pixabay API key? Wallpapers will stop updating.')">
+        <button type="submit" class="btn btn-danger btn-sm">Remove Key</button>
+      </form>
+      {% endif %}
     </div>
   </div>
 

@@ -35,6 +35,9 @@ x-app-env: &app-env
   ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
   SECRET_KEY: ${SECRET_KEY:-stelr-secret-change-me}
   SESSION_TIMEOUT_MINUTES: ${SESSION_TIMEOUT_MINUTES:-30}
+  # Optional. Wallpaper keys are normally added on the Admin page and stored
+  # encrypted with SECRET_KEY; setting this instead overrides that.
+  PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
 
 services:
 
