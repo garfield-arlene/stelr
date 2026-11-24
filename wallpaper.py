@@ -42,15 +42,17 @@ ROTATIONS = ("daily", "login", "manual")
 MODES = ("random", "keywords")
 RANDOM_CATEGORIES = ("backgrounds", "nature", "places")
 
+# Defaults suit Stelr's theme: night-sky photos, lightly dimmed and unblurred
+# so the stars stay crisp, with the frosted panels keeping text readable.
 DEFAULTS = {
     "enabled": False,
     "provider": "pixabay",
-    "mode": "random",
-    "keywords": "",
+    "mode": "keywords",
+    "keywords": "stars, constellations, night sky",
     "rotation": "daily",
-    "dim": 60,            # overlay over the whole image, percent
-    "blur": True,
-    "panel_opacity": 70,  # panel backgrounds over the image, percent
+    "dim": 20,            # overlay over the whole image, percent (20-95)
+    "blur": False,
+    "panel_opacity": 50,  # panel backgrounds over the image, percent (50-100)
     "current": None,
 }
 

@@ -153,18 +153,20 @@ needs a Pixabay API key added by your admin (see [Wallpaper
 Sources](#wallpaper-sources)); until then the option is greyed out.
 
 - **Source** — where images come from. Pixabay is the only source today.
-- **Image selection** — *Random* picks from Pixabay's editor's-choice
-  nature, places, and background photos. *Keywords* takes a comma-separated
-  list (e.g. `mountains, fog, ocean`) and uses one of them, chosen at random,
-  for each new image.
+- **Image selection** — *Keywords* (default) takes a comma-separated list
+  and uses one of them, chosen at random, for each new image. It starts as
+  `stars, constellations, night sky`, to suit Stelr's theme; change it to
+  anything you like (e.g. `mountains, fog, ocean`). *Random* picks from
+  Pixabay's editor's-choice nature, places, and background photos.
 - **Change image** — once a day (default), on every login, or only when you
   click **Next image**.
-- **Dim** — how much the whole image is darkened (default 60%).
-- **Panel opacity** — how much the panels hide the image (default 70%).
+- **Dim** — how much the whole image is darkened (default 20%, the lowest).
+- **Panel opacity** — how much the panels hide the image (default 50%, the
+  lowest).
   Panels are frosted: the image shows through them, but it's blurred and
   darkened behind each panel, so text stays readable even with a bright
   image. At 100% the panels are solid.
-- **Blur** — softens the image itself.
+- **Blur** — softens the image itself (off by default, so stars stay sharp).
 
 Changes preview live while the dialog is open. Collapsing the
 [Groups and API Tokens](#organizing-links-into-groups) panels also shows
@@ -368,11 +370,11 @@ curl -H "Authorization: Bearer $TOKEN" "http://localhost:8082/api/wallpaper?sess
   "enabled": true,
   "provider": "pixabay",
   "mode": "keywords",
-  "keywords": ["mountains", "fog"],
+  "keywords": ["stars", "constellations", "night sky"],
   "rotation": "daily",
-  "dim": 60,
-  "blur": true,
-  "panel_opacity": 70,
+  "dim": 20,
+  "blur": false,
+  "panel_opacity": 50,
   "image": {
     "id": 1867616,
     "download_url": "/api/wallpaper/image/1867616",
