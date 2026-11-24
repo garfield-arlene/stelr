@@ -4,7 +4,9 @@ import secrets
 import hashlib
 import importlib
 import logging
+import re
 import bcrypt
+from urllib.parse import parse_qsl, urlencode
 from functools import wraps
 from datetime import timedelta
 from flask import (Flask, render_template, request, redirect,
@@ -16,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import wallpaper
 import secret_box
+from plugins.base import LinkQuery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -188,48 +191,48 @@ def register():
 
 # ── Main app routes ────────────────────────────────────────────────────────
 
-RANK_OPS = {
-    "<":  lambda rank, val: rank < val,
-    "<=": lambda rank, val: rank <= val,
-    "==": lambda rank, val: rank == val,
-    ">=": lambda rank, val: rank >= val,
-    ">":  lambda rank, val: rank > val,
-}
+PAGE_SIZES = (10, 25, 50, 100, 250, 500)
+DEFAULT_PAGE_SIZE = 50
+API_MAX_PER_PAGE = 1000
+# Query-string keys that make up a dashboard view; used to send the user back
+# to the same filtered, sorted page after editing or deleting a link.
+VIEW_PARAMS = ("q", "rank_op", "rank_val", "group", "sort", "dir", "page")
 
 
-def filter_links(links, query, rank_op, rank_val):
-    if query:
-        q = query.lower()
-        links = [l for l in links if q in l.get("title", "").lower()
-                                   or q in l.get("url", "").lower()]
-    if rank_op in RANK_OPS and rank_val:
-        try:
-            rank_val_int = int(rank_val)
-        except ValueError:
-            return links
-        cmp = RANK_OPS[rank_op]
-        links = [l for l in links if cmp(l.get("rank", 0), rank_val_int)]
-    return links
+def _page_size_key(user_id) -> str:
+    # [A-Za-z0-9_-] only, so it's also a valid XML element name.
+    return "page_size_" + re.sub(r"[^A-Za-z0-9_-]", "", str(user_id))
 
 
-def filter_by_group(links, group_filter):
-    if group_filter == "__ungrouped__":
-        return [l for l in links if not l.get("group_id")]
-    if group_filter:
-        return [l for l in links if l.get("group_id") == group_filter]
-    return links
+def get_page_size(storage, user_id) -> int:
+    try:
+        size = int(storage.get_setting(_page_size_key(user_id), ""))
+    except ValueError:
+        return DEFAULT_PAGE_SIZE
+    return size if size in PAGE_SIZES else DEFAULT_PAGE_SIZE
 
 
-SORT_FIELDS = {
-    "rank":  lambda l: l.get("rank", 0),
-    "title": lambda l: l.get("title", "").lower(),
-    "url":   lambda l: l.get("url", "").lower(),
-}
+def _int_arg(args, name):
+    try:
+        return int(args.get(name, ""))
+    except ValueError:
+        return None
 
 
-def sort_links(links, sort_field, direction):
-    key_fn = SORT_FIELDS.get(sort_field, SORT_FIELDS["rank"])
-    return sorted(links, key=key_fn, reverse=(direction == "desc"))
+def link_query_from_args(args, page=1, per_page=None, clamp_page=True) -> LinkQuery:
+    return LinkQuery.build(q=args.get("q", ""), rank_op=args.get("rank_op", "").strip(),
+                           rank_val=args.get("rank_val", ""), group=args.get("group", ""),
+                           sort=args.get("sort", "rank").strip(),
+                           direction=args.get("dir", "asc").strip(),
+                           page=page, per_page=per_page, clamp_page=clamp_page)
+
+
+def redirect_to_view():
+    """Redirect to the dashboard view the form was posted from (filters,
+    sort and page), which the form passes back in its "view" field."""
+    params = [(k, v) for k, v in parse_qsl(request.form.get("view", ""))
+              if k in VIEW_PARAMS]
+    return redirect(url_for("index") + ("?" + urlencode(params) if params else ""))
 
 
 def resolve_group_id(storage, user_id, group_id):
@@ -244,37 +247,39 @@ def resolve_group_id(storage, user_id, group_id):
 @login_required
 def index():
     storage = get_storage()
-    links  = storage.get_all(current_user.id)
     groups = storage.get_groups(current_user.id)
     group_map = {g["id"]: g["name"] for g in groups}
     api_tokens = storage.get_api_tokens(current_user.id)
 
-    query        = request.args.get("q", "").strip()
-    rank_op      = request.args.get("rank_op", "").strip()
-    rank_val     = request.args.get("rank_val", "").strip()
-    group_filter = request.args.get("group", "").strip()
-    sort_field   = request.args.get("sort", "rank").strip()
-    sort_dir     = request.args.get("dir", "asc").strip()
-    if sort_dir not in ("asc", "desc"):
-        sort_dir = "asc"
-    if sort_field not in SORT_FIELDS:
-        sort_field = "rank"
+    # Rows per page is remembered per user, so it follows them across devices.
+    per_page = get_page_size(storage, current_user.id)
+    requested = _int_arg(request.args, "per_page")
+    if requested in PAGE_SIZES and requested != per_page:
+        per_page = requested
+        storage.set_setting(_page_size_key(current_user.id), str(per_page))
 
-    links = filter_links(links, query, rank_op, rank_val)
-    links = filter_by_group(links, group_filter)
-    links = sort_links(links, sort_field, sort_dir)
+    result = storage.query_links(current_user.id, link_query_from_args(
+        request.args, page=_int_arg(request.args, "page") or 1, per_page=per_page))
+    lq = result.query
+    view = urlencode([(k, v) for k, v in request.args.items(multi=True)
+                      if k in VIEW_PARAMS and k != "page"]
+                     + ([("page", lq.page)] if lq.page > 1 else []))
 
     wp_settings = wallpaper.load_settings(storage, current_user.id)
 
-    return render_template("index.html", links=links, groups=groups, group_map=group_map,
+    return render_template("index.html", links=result.links, result=result,
+                           page_sizes=PAGE_SIZES, view=view,
+                           groups=groups, group_map=group_map,
                            api_tokens=api_tokens,
                            wallpaper=wp_settings,
                            wallpaper_image=wallpaper.current_image(wp_settings),
                            wallpaper_providers=wallpaper.providers_for_template(storage),
                            backend=STORAGE_BACKEND, version=APP_VERSION, app_name=APP_NAME,
                            timeout=SESSION_TIMEOUT_MINUTES,
-                           filter_q=query, filter_rank_op=rank_op, filter_rank_val=rank_val,
-                           filter_group=group_filter, sort_field=sort_field, sort_dir=sort_dir)
+                           filter_q=request.args.get("q", "").strip(),
+                           filter_rank_op=request.args.get("rank_op", "").strip(),
+                           filter_rank_val=request.args.get("rank_val", "").strip(),
+                           filter_group=lq.group, sort_field=lq.sort, sort_dir=lq.direction)
 
 
 @app.route("/add", methods=["POST"])
@@ -315,7 +320,7 @@ def add():
 def delete(link_id):
     get_storage().delete(link_id, current_user.id)
     flash("Link deleted.", "info")
-    return redirect(url_for("index"))
+    return redirect_to_view()
 
 
 @app.route("/groups/create", methods=["POST"])
@@ -387,7 +392,7 @@ def update(link_id):
     storage.update(link_id, {"title": title, "url": url, "rank": rank, "group_id": group_id},
                     current_user.id)
     flash("Link updated.", "success")
-    return redirect(url_for("index"))
+    return redirect_to_view()
 
 
 # ── Admin routes ───────────────────────────────────────────────────────────
@@ -713,23 +718,29 @@ def api_revoke_token(token_id):
 @app.route("/api/links", methods=["GET"])
 @api_auth_required
 def api_links():
-    links = get_storage().get_all(g.api_user_id)
-
-    query        = request.args.get("q", "").strip()
-    rank_op      = request.args.get("rank_op", "").strip()
-    rank_val     = request.args.get("rank_val", "").strip()
-    group_filter = request.args.get("group", "").strip()
-    sort_field   = request.args.get("sort", "rank").strip()
-    sort_dir     = request.args.get("dir", "asc").strip()
-    if sort_dir not in ("asc", "desc"):
-        sort_dir = "asc"
-    if sort_field not in SORT_FIELDS:
-        sort_field = "rank"
-
-    links = filter_links(links, query, rank_op, rank_val)
-    links = filter_by_group(links, group_filter)
-    links = sort_links(links, sort_field, sort_dir)
-    return jsonify(links)
+    # Without page/per_page every matching link is returned, as before.
+    # With either, one page comes back and the X-Total-Count, X-Page,
+    # X-Per-Page and X-Total-Pages headers describe the rest.
+    page = _int_arg(request.args, "page")
+    per_page = _int_arg(request.args, "per_page")
+    paginate = page is not None or per_page is not None
+    if paginate:
+        if per_page is None:
+            per_page = DEFAULT_PAGE_SIZE
+        if not 1 <= per_page <= API_MAX_PER_PAGE:
+            return jsonify({"error": f"per_page must be between 1 and {API_MAX_PER_PAGE}"}), 400
+        if page is not None and page < 1:
+            return jsonify({"error": "page must be 1 or more"}), 400
+    result = get_storage().query_links(g.api_user_id, link_query_from_args(
+        request.args, page=page or 1, per_page=per_page if paginate else None,
+        clamp_page=False))
+    resp = jsonify(result.links)
+    if paginate:
+        resp.headers["X-Total-Count"] = str(result.total)
+        resp.headers["X-Page"] = str(result.query.page)
+        resp.headers["X-Per-Page"] = str(result.query.per_page)
+        resp.headers["X-Total-Pages"] = str(result.pages)
+    return resp
 
 
 @app.route("/api/links", methods=["POST"])

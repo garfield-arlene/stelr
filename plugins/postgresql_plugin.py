@@ -5,7 +5,7 @@ import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 from typing import List, Dict, Any, Optional
-from plugins.base import StoragePlugin
+from plugins.base import StoragePlugin, LinkQuery, LinkPage, link_sql
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,15 @@ class PostgresqlPlugin(StoragePlugin):
                 )
             """)
             conn.commit()
+            # Lets the dashboard page through a user's links by rank without
+            # sorting the whole table. Failure only costs speed.
+            try:
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_links_user_rank "
+                            "ON links (user_id, rank)")
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                logger.warning(f"[postgresql] Could not add links index: {e}")
             cur.close(); conn.close()
             logger.info("[postgresql] Tables ready.")
         except Exception as e:
@@ -210,6 +219,27 @@ class PostgresqlPlugin(StoragePlugin):
         rows = [dict(r) for r in cur.fetchall()]
         cur.close(); self._release_conn(conn)
         return rows
+
+    def query_links(self, user_id: str, lq: LinkQuery) -> LinkPage:
+        where, params, order = link_sql(lq, "rank")
+        params = [user_id] + params
+        conn = self._conn()
+        try:
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute(f"SELECT COUNT(*) AS n FROM links WHERE {where}", params)
+            total = cur.fetchone()["n"]
+            lq = lq.clamp(total)
+            sql = (f"SELECT id, user_id, title, url, rank, group_id FROM links "
+                   f"WHERE {where} ORDER BY {order}")
+            if lq.per_page:
+                sql += " LIMIT %s OFFSET %s"
+                params += [lq.per_page, lq.offset]
+            cur.execute(sql, params)
+            rows = [dict(r) for r in cur.fetchall()]
+            cur.close()
+        finally:
+            self._release_conn(conn)
+        return LinkPage(links=rows, total=total, query=lq)
 
     def get_all_links_admin(self) -> List[Dict[str, Any]]:
         conn = self._conn()

@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v6.1.0** · [AGPL-3.0](LICENSE)
+**v6.2.0** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,6 +11,8 @@ and approval.
 
 ## New features and bug fixes
 
+- **Pagination** — the dashboard shows links a page at a time, with a **Rows per page** choice (10–500, remembered per user). With MySQL or PostgreSQL, filtering, sorting and paging run in the database, so large collections load quickly
+- `GET /api/links` accepts optional `page` and `per_page` parameters and returns the totals in response headers
 - **Wallpapers** — each user can put a dimmed, optionally blurred photo from Pixabay behind their dashboard, chosen at random or from their own keywords (needs a Pixabay API key added by the admin)
 - REST API endpoints for wallpapers: desktop clients can fetch and download the same wallpaper the dashboard shows, and admins can manage the Pixabay API key
 - Third-party API keys are stored encrypted, using a key derived from `SECRET_KEY`
@@ -39,6 +41,7 @@ and approval.
 - Filter entries by keyword (substring) in title or URL
 - Filter entries by rank using a numerical comparison (<, <=, ==, >=, >)
 - Group links into folders, and sort entries by clicking a column header
+- Pagination with a selectable number of rows per page
 - Optional per-user wallpaper from Pixabay, dimmed so the dashboard stays readable
 
 ---
@@ -126,6 +129,21 @@ be combined. Click **Clear** to reset.
 Click any of the **Rank**, **Title**, or **URL** column headers to sort the
 table by that column. Clicking the same header again reverses the direction;
 an arrow next to the header shows the current sort field and direction.
+
+### Paging through links
+The table shows one page of links at a time; the line above it says which
+links you're looking at (e.g. *Showing 51–100 of 1,234 links*). Use the page
+buttons (« ‹ 1 2 3 … › ») to move between pages, and the **Rows per page**
+dropdown to choose 10, 25, 50, 100, 250 or 500. The default is 50, and your
+choice is saved to your account, so it follows you to other devices.
+
+Changing a filter or the sort order starts again from page 1. Editing or
+deleting a link brings you back to the page you were on.
+
+With the MySQL and PostgreSQL backends only the rows on the current page are
+read from the database (plus a count of the matches), so the dashboard stays
+fast however many links you have. The file backends (XML, YAML, HTML) still
+read their whole file, but only render one page.
 
 ### Showing or hiding the URL column
 Click **Hide URL** above the table to declutter the view — sorting and
@@ -263,7 +281,7 @@ panel use. Two auth methods are supported:
 | `/api/tokens`               | POST   | No\*           | Create a token (bootstrap with username/password, or mint one for the current session) |
 | `/api/tokens`               | GET    | Yes            | List your tokens (id + name only)              |
 | `/api/tokens/<id>`           | DELETE | Yes            | Revoke a token                                 |
-| `/api/links`                | GET    | Yes            | List your links (supports the same `q`, `rank_op`, `rank_val`, `group`, `sort`, `dir` params as the web UI's filter/sort) |
+| `/api/links`                | GET    | Yes            | List your links (supports the same `q`, `rank_op`, `rank_val`, `group`, `sort`, `dir` params as the web UI's filter/sort, plus optional `page`/`per_page`) |
 | `/api/links`                | POST   | Yes            | Create a link                                  |
 | `/api/links/<id>`           | GET    | Yes            | Get a single link                              |
 | `/api/links/<id>`           | PUT    | Yes            | Update a link (partial — omitted fields are unchanged) |
@@ -317,6 +335,12 @@ curl -X POST http://localhost:8082/api/links \
 
 # List (with the web UI's filter/sort params)
 curl -H "Authorization: Bearer $TOKEN" "http://localhost:8082/api/links?q=github&sort=title"
+
+# One page at a time. Without page/per_page every matching link is returned.
+# per_page is 1-1000 (default 50 when only page is given). A page past the
+# end returns []. The totals come back as headers:
+#   X-Total-Count: 1234   X-Page: 2   X-Per-Page: 100   X-Total-Pages: 13
+curl -i -H "Authorization: Bearer $TOKEN" "http://localhost:8082/api/links?page=2&per_page=100"
 
 # Update just the rank
 curl -X PUT http://localhost:8082/api/links/<id> \
