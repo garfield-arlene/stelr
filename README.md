@@ -2,7 +2,7 @@
 
 **v6.2.0** · [AGPL-3.0](LICENSE)
 
-Stelr is a web app for saving, organising, and ranking URLs. Add any link with a
+Stelr is a web app for saving, organizing, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
 User accounts are required to access the app, with admin-controlled registration
 and approval.
@@ -48,9 +48,10 @@ and approval.
 
 ## To do
 
-- User requests
-  - Create store accounts for Chrome and Edge
-  - Upload extensions to their respective stores
+- Planned features
+  - Add in-app links to the browser extensions (Chrome, Edge, Firefox) and desktop app downloads
+  - Add forgot-password / account recovery
+  - Add social login (Google, Facebook, and other OAuth providers)
 
 ---
 
