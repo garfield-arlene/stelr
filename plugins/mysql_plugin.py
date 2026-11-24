@@ -4,7 +4,7 @@ import logging
 import mysql.connector
 import mysql.connector.pooling
 from typing import List, Dict, Any, Optional
-from plugins.base import StoragePlugin
+from plugins.base import StoragePlugin, LinkQuery, LinkPage, link_sql
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,22 @@ class MysqlPlugin(StoragePlugin):
             logger.info("[mysql] Tables ready.")
         except Exception as e:
             raise RuntimeError(f"[mysql] Could not create tables: {e}")
+        self._ensure_link_index()
+
+    def _ensure_link_index(self):
+        # Lets the dashboard page through a user's links by rank without
+        # sorting the whole table. Failure only costs speed, so don't stop
+        # the app over it (e.g. two workers racing to create it).
+        try:
+            conn = self._conn()
+            cur = conn.cursor()
+            cur.execute("SHOW INDEX FROM links WHERE Key_name='idx_links_user_rank'")
+            if not cur.fetchall():
+                logger.info("[mysql] Adding index idx_links_user_rank on links...")
+                cur.execute("CREATE INDEX idx_links_user_rank ON links (user_id, `rank`)")
+            cur.close(); conn.close()
+        except Exception as e:
+            logger.warning(f"[mysql] Could not add links index: {e}")
 
     # ── Settings ───────────────────────────────────────────────────────────
 
@@ -205,6 +221,27 @@ class MysqlPlugin(StoragePlugin):
         rows = cur.fetchall()
         cur.close(); conn.close()
         return rows
+
+    def query_links(self, user_id: str, lq: LinkQuery) -> LinkPage:
+        where, params, order = link_sql(lq, "`rank`")
+        params = [user_id] + params
+        conn = self._conn()
+        try:
+            cur = conn.cursor(dictionary=True)
+            cur.execute(f"SELECT COUNT(*) AS n FROM links WHERE {where}", params)
+            total = cur.fetchone()["n"]
+            lq = lq.clamp(total)
+            sql = (f"SELECT id, user_id, title, url, `rank`, group_id FROM links "
+                   f"WHERE {where} ORDER BY {order}")
+            if lq.per_page:
+                sql += " LIMIT %s OFFSET %s"
+                params += [lq.per_page, lq.offset]
+            cur.execute(sql, params)
+            rows = cur.fetchall()
+            cur.close()
+        finally:
+            conn.close()
+        return LinkPage(links=rows, total=total, query=lq)
 
     def get_all_links_admin(self) -> List[Dict[str, Any]]:
         conn = self._conn()

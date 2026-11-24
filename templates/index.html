@@ -145,6 +145,25 @@
     .entry-row + .entry-row { margin-top: 0.75rem; }
     .add-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
     .table-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+    /* ── Pagination ── */
+    .pager { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem;
+             font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin: 0.75rem 0; }
+    .pager .pager-info { margin-right: auto; }
+    .pager .pager-info strong { color: var(--text); font-weight: 600; }
+    .pager form { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+    .pager select { width: auto; padding: 0.3rem 0.5rem; font-size: 0.75rem; }
+    .pager label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.75rem; }
+    .pager-pages { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center; }
+    .pager-pages a, .pager-pages span.cur {
+      min-width: 2rem; padding: 0.3rem 0.55rem; text-align: center; text-decoration: none;
+      border: 1px solid var(--border); color: var(--text); background: var(--surface); }
+    .pager-pages a:hover { border-color: var(--accent); color: var(--accent); }
+    .pager-pages span.cur { border-color: var(--accent); color: var(--accent);
+                            background: rgba(0,229,160,0.08); }
+    .pager-pages span.disabled { opacity: 0.35; padding: 0.3rem 0.55rem; border: 1px solid var(--border); }
+    .pager-pages .gap { padding: 0 0.2rem; }
+    .pager-bottom .pager-info, .pager-bottom form { display: none; }
+    .pager-bottom { justify-content: flex-end; }
     table.hide-url .url-col, table.hide-url .link-url { display: none; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
                       display: flex; align-items: center; justify-content: center; z-index: 200; }
@@ -406,10 +425,68 @@
     <a class="sort-link" href="{{ url_for('index', q=filter_q, rank_op=filter_rank_op, rank_val=filter_rank_val, group=filter_group, sort=field, dir=next_dir) }}">{{ label }}{% if sort_field == field %}{{ ' ▲' if sort_dir == 'asc' else ' ▼' }}{% endif %}</a>
   {%- endmacro %}
 
+  {% macro page_url(p) -%}
+    {{ url_for('index', q=filter_q or None, rank_op=filter_rank_op or None, rank_val=filter_rank_val or None,
+                group=filter_group or None, sort=sort_field, dir=sort_dir, page=p if p > 1 else None) }}
+  {%- endmacro %}
+
+  {% macro pager(extra_class='') -%}
+  {%- set cur = result.query.page -%}
+  {%- set pages = result.pages -%}
+  <nav class="pager {{ extra_class }}" aria-label="Pages">
+    <div class="pager-info">
+      {% if result.total %}
+      Showing <strong>{{ result.first }}–{{ result.last }}</strong> of <strong>{{ '{:,}'.format(result.total) }}</strong>
+      {{ 'link' if result.total == 1 else 'links' }}
+      {% endif %}
+    </div>
+    <form method="GET" action="/">
+      {% for k in ['q', 'rank_op', 'rank_val', 'group'] %}
+        {% set v = request.args.get(k, '') %}
+        {% if v %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}
+      {% endfor %}
+      <input type="hidden" name="sort" value="{{ sort_field }}">
+      <input type="hidden" name="dir" value="{{ sort_dir }}">
+      <label for="per-page-{{ extra_class or 'top' }}">Rows per page</label>
+      <select id="per-page-{{ extra_class or 'top' }}" name="per_page" onchange="this.form.submit()">
+        {% for n in page_sizes %}
+        <option value="{{ n }}" {% if n == result.query.per_page %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+      <noscript><button type="submit" class="btn btn-secondary btn-sm">Apply</button></noscript>
+    </form>
+    {% if pages > 1 %}
+    <div class="pager-pages">
+      {% if cur > 1 %}
+      <a href="{{ page_url(1) }}" title="First page" aria-label="First page">«</a>
+      <a href="{{ page_url(cur - 1) }}" title="Previous page" aria-label="Previous page" rel="prev">‹</a>
+      {% else %}
+      <span class="disabled" aria-hidden="true">«</span><span class="disabled" aria-hidden="true">‹</span>
+      {% endif %}
+      {% set lo = [1, cur - 2]|max %}
+      {% set hi = [pages, cur + 2]|min %}
+      {% if lo > 1 %}<a href="{{ page_url(1) }}">1</a>{% if lo > 2 %}<span class="gap">…</span>{% endif %}{% endif %}
+      {% for p in range(lo, hi + 1) %}
+        {% if p == cur %}<span class="cur" aria-current="page">{{ p }}</span>
+        {% else %}<a href="{{ page_url(p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+      {% if hi < pages %}{% if hi < pages - 1 %}<span class="gap">…</span>{% endif %}<a href="{{ page_url(pages) }}">{{ pages }}</a>{% endif %}
+      {% if cur < pages %}
+      <a href="{{ page_url(cur + 1) }}" title="Next page" aria-label="Next page" rel="next">›</a>
+      <a href="{{ page_url(pages) }}" title="Last page" aria-label="Last page">»</a>
+      {% else %}
+      <span class="disabled" aria-hidden="true">›</span><span class="disabled" aria-hidden="true">»</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </nav>
+  {%- endmacro %}
+
   {% if links %}
   <div class="table-toolbar">
     <button type="button" class="btn btn-secondary btn-sm" id="url-toggle-btn" onclick="toggleUrlColumn()">Hide URL</button>
   </div>
+  {{ pager() }}
   <div class="table-wrap">
     <table id="links-table">
       <thead>
@@ -439,6 +516,7 @@
               <button class="btn btn-secondary btn-sm" onclick="toggleEdit('{{ link.id }}')">Edit</button>
               <form method="POST" action="/delete/{{ link.id }}"
                     onsubmit="return confirm('Delete this link?')">
+                <input type="hidden" name="view" value="{{ view }}">
                 <button type="submit" class="btn btn-danger btn-sm">Delete</button>
               </form>
             </div>
@@ -447,6 +525,7 @@
         <tr class="edit-row" id="edit-{{ link.id }}">
           <td colspan="5">
             <form method="POST" action="/update/{{ link.id }}">
+              <input type="hidden" name="view" value="{{ view }}">
               <div class="edit-form-inner">
                 <div><label>Title</label><input type="text" name="title" value="{{ link.title }}" required></div>
                 <div><label>URL</label><input type="url" name="url" value="{{ link.url }}" required></div>
@@ -476,6 +555,7 @@
       </tbody>
     </table>
   </div>
+  {% if result.pages > 1 %}{{ pager('pager-bottom') }}{% endif %}
   {% else %}
   <div class="empty">
     <div class="big">◈</div>
