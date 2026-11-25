@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v6.2.0** · [AGPL-3.0](LICENSE)
+**v6.3.0** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organizing, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
