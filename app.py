@@ -227,6 +227,21 @@ def link_query_from_args(args, page=1, per_page=None, clamp_page=True) -> LinkQu
                            page=page, per_page=per_page, clamp_page=clamp_page)
 
 
+SAFE_LINK_SCHEMES = ("http", "https", "ftp", "mailto")
+
+
+@app.template_filter("safe_href")
+def safe_href(url):
+    """Return url for use in an href, or "#" if its scheme could run script
+    (javascript:, data:, vbscript:...). Browsers ignore tabs, newlines and
+    leading spaces/control characters in a scheme, so strip those first."""
+    clean = re.sub(r"[\x00-\x20]", "", url or "")
+    m = re.match(r"([A-Za-z][A-Za-z0-9+.-]*):", clean)
+    if not m:
+        return url or "#"   # relative or scheme-less: can't run script
+    return url if m.group(1).lower() in SAFE_LINK_SCHEMES else "#"
+
+
 def redirect_to_view():
     """Redirect to the dashboard view the form was posted from (filters,
     sort and page), which the form passes back in its "view" field."""

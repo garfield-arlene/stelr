@@ -164,7 +164,10 @@
     .pager-pages .gap { padding: 0 0.2rem; }
     .pager-bottom .pager-info, .pager-bottom form { display: none; }
     .pager-bottom { justify-content: flex-end; }
-    table.hide-url .url-col, table.hide-url .link-url { display: none; }
+    /* URL column: hidden by default (titles are links); toggled per device. */
+    html.url-hidden #links-table .url-col, html.url-hidden #links-table .link-url { display: none; }
+    #url-toggle-btn .when-hidden, html.url-hidden #url-toggle-btn .when-shown { display: none; }
+    html.url-hidden #url-toggle-btn .when-hidden { display: inline; }
     .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65);
                       display: flex; align-items: center; justify-content: center; z-index: 200; }
     .modal { background: var(--surface); border: 1px solid var(--border); padding: 1.5rem; width: 320px; }
@@ -186,6 +189,10 @@
                   background: rgba(0,229,160,0.08); border: 1px solid rgba(0,229,160,0.2);
                   padding: 2px 10px; display: inline-block; min-width: 42px; text-align: center; }
     .link-title { font-weight: 600; font-size: 0.95rem; }
+    .link-title a { color: var(--text); text-decoration: none; }
+    .link-title a:hover, .link-title a:focus-visible { color: var(--accent); text-decoration: underline; }
+    .link-title a::after { content: "\2197"; margin-left: 0.3em; font-size: 0.75em; color: var(--muted); }
+    .link-title a:hover::after { color: var(--accent); }
     .link-url a { color: var(--accent2); font-family: var(--mono); font-size: 0.75rem;
                   text-decoration: none; word-break: break-all; }
     .link-url a:hover { text-decoration: underline; }
@@ -206,6 +213,15 @@
     }
   </style>
   <script>
+    // Hide the URL column unless this device chose to show it. Done before
+    // first paint so the column doesn't flash in and out.
+    try {
+      if (localStorage.getItem('stelr_hide_url') !== '0') {
+        document.documentElement.classList.add('url-hidden');
+      }
+    } catch (e) {
+      document.documentElement.classList.add('url-hidden');
+    }
     // Apply saved collapsed state before first paint to avoid a flash of expanded panels.
     try {
       var collapsedPanels = JSON.parse(localStorage.getItem('stelr_collapsed_panels') || '[]');
@@ -484,7 +500,7 @@
 
   {% if links %}
   <div class="table-toolbar">
-    <button type="button" class="btn btn-secondary btn-sm" id="url-toggle-btn" onclick="toggleUrlColumn()">Hide URL</button>
+    <button type="button" class="btn btn-secondary btn-sm" id="url-toggle-btn" onclick="toggleUrlColumn()"><span class="when-shown">Hide URL</span><span class="when-hidden">Show URL</span></button>
   </div>
   {{ pager() }}
   <div class="table-wrap">
@@ -502,8 +518,14 @@
         {% for link in links %}
         <tr id="row-{{ link.id }}">
           <td><span class="rank-badge">{{ link.rank }}</span></td>
-          <td class="link-title">{{ link.title }}</td>
-          <td class="link-url"><a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url }}</a></td>
+          {% set href = link.url | safe_href %}
+          {% if href != '#' %}
+          <td class="link-title"><a href="{{ href }}" target="_blank" rel="noopener" title="{{ link.url }}">{{ link.title }}</a></td>
+          <td class="link-url"><a href="{{ href }}" target="_blank" rel="noopener">{{ link.url }}</a></td>
+          {% else %}
+          <td class="link-title" title="Not a web address, so not clickable">{{ link.title }}</td>
+          <td class="link-url">{{ link.url }}</td>
+          {% endif %}
           <td>
             {% if link.group_id and group_map.get(link.group_id) %}
             <span class="group-badge">{{ group_map[link.group_id] }}</span>
@@ -718,26 +740,9 @@
   }
 
   function toggleUrlColumn() {
-    const table = document.getElementById('links-table');
-    const btn = document.getElementById('url-toggle-btn');
-    if (!table) return;
-    const hidden = table.classList.toggle('hide-url');
-    btn.textContent = hidden ? 'Show URL' : 'Hide URL';
-    localStorage.setItem('stelr_hide_url', hidden ? '1' : '0');
+    const hidden = document.documentElement.classList.toggle('url-hidden');
+    try { localStorage.setItem('stelr_hide_url', hidden ? '1' : '0'); } catch (e) {}
   }
-
-  (function initUrlColumn() {
-    const saved = localStorage.getItem('stelr_hide_url');
-    const hideByDefault = saved !== null ? saved === '1' : window.matchMedia('(max-width: 700px)').matches;
-    document.addEventListener('DOMContentLoaded', function() {
-      if (!hideByDefault) return;
-      const table = document.getElementById('links-table');
-      const btn = document.getElementById('url-toggle-btn');
-      if (!table) return;
-      table.classList.add('hide-url');
-      btn.textContent = 'Show URL';
-    });
-  })();
 
   function getCollapsedPanels() {
     try {
