@@ -1,6 +1,6 @@
 # 🔗 Stelr
 
-**v6.2.0** · [AGPL-3.0](LICENSE)
+**v6.3.1** · [AGPL-3.0](LICENSE)
 
 Stelr is a web app for saving, organizing, and ranking URLs. Add any link with a
 title and a numeric rank — Stelr keeps them sorted and accessible from any browser.
@@ -11,6 +11,8 @@ and approval.
 
 ## New features and bug fixes
 
+- Link titles are now clickable, so the URL column is hidden by default on every device (use **Show URL** to bring it back)
+- Links whose URL isn't a web or email address (e.g. `javascript:`) are no longer clickable on the dashboard or the admin page
 - **Pagination** — the dashboard shows links a page at a time, with a **Rows per page** choice (10–500, remembered per user). With MySQL or PostgreSQL, filtering, sorting and paging run in the database, so large collections load quickly
 - `GET /api/links` accepts optional `page` and `per_page` parameters and returns the totals in response headers
 - **Wallpapers** — each user can put a dimmed, optionally blurred photo from Pixabay behind their dashboard, chosen at random or from their own keywords (needs a Pixabay API key added by the admin)
@@ -146,11 +148,17 @@ read from the database (plus a count of the matches), so the dashboard stays
 fast however many links you have. The file backends (XML, YAML, HTML) still
 read their whole file, but only render one page.
 
+### Opening a link
+Click or tap a link's title to open it in a new tab (titles are marked with
+↗). Hovering over a title shows its URL. Only web and email addresses
+(`http`, `https`, `ftp`, `mailto`) are made clickable; anything else, such as
+a `javascript:` URL, is shown but not linked.
+
 ### Showing or hiding the URL column
-Click **Hide URL** above the table to declutter the view — sorting and
-filtering by URL still work while the column is hidden, they just don't need
-it to be visible on screen. Your preference is remembered on that device. On
-narrow/mobile screens the URL column is hidden by default.
+Because titles are links, the URL column is hidden by default on every
+screen size. Click **Show URL** above the table to bring it back, and **Hide
+URL** to hide it again. Sorting and filtering by URL work either way. Your
+choice is remembered on that device.
 
 ### Organizing links into groups
 Use the **Manage Groups** panel to create, rename, or delete groups (folders)
