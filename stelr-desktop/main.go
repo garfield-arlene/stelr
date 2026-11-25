@@ -5,14 +5,19 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"image/color"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
@@ -50,6 +55,30 @@ const (
 	allGroupsID = "__all__"
 	ungroupedID = "__ungrouped__"
 )
+
+// wallpaperDir is the folder Stelr keeps its copy of the wallpaper in.
+func wallpaperDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "stelr"), nil
+}
+
+// removeSavedWallpaper deletes a wallpaper copy Stelr saved earlier. It
+// ignores any path outside Stelr's config folder, so a stray preference
+// can't make it delete an unrelated file.
+func removeSavedWallpaper(path string) {
+	dir, err := wallpaperDir()
+	if err != nil || path == "" {
+		return
+	}
+	path = filepath.Clean(path)
+	if filepath.Dir(path) != dir || !strings.HasPrefix(filepath.Base(path), "wallpaper.") {
+		return
+	}
+	_ = os.Remove(path)
+}
 
 func buildGroupOptions(groups []Group) ([]string, []string) {
 	nameCount := make(map[string]int)
@@ -1062,6 +1091,101 @@ func main() {
 
 	showLoggedOut()
 
+	wallpaper := canvas.NewImageFromFile("")
+	wallpaper.FillMode = canvas.ImageFillContain
+	wallpaper.Hide()
+
+	wallpaperOverlay := canvas.NewRectangle(color.NRGBA{0, 0, 0, 140})
+	wallpaperOverlay.Hide()
+
+	savedWallpaper := myApp.Preferences().String("wallpaper_path")
+
+	if savedWallpaper != "" {
+		if _, err := os.Stat(savedWallpaper); err == nil {
+			wallpaper.File = savedWallpaper
+			wallpaper.Show()
+			wallpaperOverlay.Show()
+		}
+	}
+
+	removeWallpaperButton := widget.NewButton("Remove Wallpaper", func() {
+
+		savedWallpaper := myApp.Preferences().String("wallpaper_path")
+
+		if savedWallpaper != "" {
+			removeSavedWallpaper(myApp.Preferences().String("wallpaper_path"))
+		}
+
+		myApp.Preferences().RemoveValue("wallpaper_path")
+
+		wallpaper.File = ""
+		wallpaper.Hide()
+		wallpaperOverlay.Hide()
+		statusLabel.SetText("Wallpaper removed")
+	})
+
+	chooseWallpaperButton := widget.NewButton("Choose Wallpaper", func() {
+		dialog.ShowFileOpen(
+			func(reader fyne.URIReadCloser, err error) {
+				if err != nil {
+					statusLabel.SetText("Error opening file: " + err.Error())
+					return
+				}
+				if reader == nil {
+					return
+				}
+				defer reader.Close()
+
+				ext := strings.ToLower(filepath.Ext(reader.URI().Path()))
+				switch ext {
+				case ".png", ".jpg", ".jpeg":
+				default:
+					statusLabel.SetText("Wallpaper must be a PNG or JPEG image")
+					return
+				}
+
+				stelrDir, err := wallpaperDir()
+				if err != nil {
+					statusLabel.SetText("Error getting config directory: " + err.Error())
+					return
+				}
+				if err := os.MkdirAll(stelrDir, 0o700); err != nil {
+					statusLabel.SetText("Error creating config directory: " + err.Error())
+					return
+				}
+
+				savedPath := filepath.Clean(filepath.Join(stelrDir, "wallpaper"+ext))
+				dst, err := os.OpenFile(savedPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+				if err != nil {
+					statusLabel.SetText("Error saving wallpaper: " + err.Error())
+					return
+				}
+
+				_, copyErr := io.Copy(dst, reader)
+				closeErr := dst.Close()
+				if copyErr != nil || closeErr != nil {
+					statusLabel.SetText("Error saving wallpaper: " + fmt.Sprintf("%v %v", copyErr, closeErr))
+					return
+				}
+
+				if old := myApp.Preferences().String("wallpaper_path"); old != savedPath {
+					removeSavedWallpaper(old)
+				}
+
+				myApp.Preferences().SetString("wallpaper_path", savedPath)
+
+				wallpaper.File = savedPath
+				wallpaper.Show()
+				wallpaper.Refresh()
+				wallpaperOverlay.Show()
+
+				statusLabel.SetText("Wallpaper set")
+
+			},
+			window,
+		)
+	})
+
 	sidebar := container.NewVBox(
 		widget.NewLabelWithStyle("Connection", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		connectionArea,
@@ -1092,6 +1216,8 @@ func main() {
 		groupNameEntry,
 		createGroupButton,
 		widget.NewSeparator(),
+		chooseWallpaperButton,
+		removeWallpaperButton,
 		widget.NewLabel("Version: "+version),
 	)
 
@@ -1109,10 +1235,21 @@ func main() {
 		linkList,
 	)
 
-	split := container.NewHSplit(container.NewVScroll(sidebar), mainArea)
+	split := container.NewHSplit(
+		container.NewVScroll(sidebar),
+		mainArea,
+	)
+
 	split.SetOffset(0.28)
 
-	window.SetContent(split)
+	appContent := container.NewStack(
+		wallpaper,
+		wallpaperOverlay,
+		split,
+	)
+
+	window.SetContent(appContent)
+
 	window.Resize(fyne.NewSize(900, 600))
 
 	window.ShowAndRun()
