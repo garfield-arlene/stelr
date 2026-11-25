@@ -56,6 +56,30 @@ const (
 	ungroupedID = "__ungrouped__"
 )
 
+// wallpaperDir is the folder Stelr keeps its copy of the wallpaper in.
+func wallpaperDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, "stelr"), nil
+}
+
+// removeSavedWallpaper deletes a wallpaper copy Stelr saved earlier. It
+// ignores any path outside Stelr's config folder, so a stray preference
+// can't make it delete an unrelated file.
+func removeSavedWallpaper(path string) {
+	dir, err := wallpaperDir()
+	if err != nil || path == "" {
+		return
+	}
+	path = filepath.Clean(path)
+	if filepath.Dir(path) != dir || !strings.HasPrefix(filepath.Base(path), "wallpaper.") {
+		return
+	}
+	_ = os.Remove(path)
+}
+
 func buildGroupOptions(groups []Group) ([]string, []string) {
 	nameCount := make(map[string]int)
 
@@ -1089,7 +1113,7 @@ func main() {
 		savedWallpaper := myApp.Preferences().String("wallpaper_path")
 
 		if savedWallpaper != "" {
-			_ = os.Remove(savedWallpaper)
+			removeSavedWallpaper(myApp.Preferences().String("wallpaper_path"))
 		}
 
 		myApp.Preferences().RemoveValue("wallpaper_path")
@@ -1112,28 +1136,26 @@ func main() {
 				}
 				defer reader.Close()
 
-				configDir, err := os.UserConfigDir()
+				ext := strings.ToLower(filepath.Ext(reader.URI().Path()))
+				switch ext {
+				case ".png", ".jpg", ".jpeg":
+				default:
+					statusLabel.SetText("Wallpaper must be a PNG or JPEG image")
+					return
+				}
+
+				stelrDir, err := wallpaperDir()
 				if err != nil {
 					statusLabel.SetText("Error getting config directory: " + err.Error())
 					return
 				}
-				stelrDir := filepath.Join(configDir, "stelr")
-
-				if err := os.MkdirAll(stelrDir, 0755); err != nil {
+				if err := os.MkdirAll(stelrDir, 0o700); err != nil {
 					statusLabel.SetText("Error creating config directory: " + err.Error())
 					return
 				}
 
-				oldWallpaper := myApp.Preferences().String("wallpaper_path")
-
-				if oldWallpaper != "" {
-					_ = os.Remove(oldWallpaper)
-				}
-
-				ext := filepath.Ext(reader.URI().Path())
-				savedPath := filepath.Join(stelrDir, "wallpaper"+ext)
-
-				dst, err := os.Create(savedPath)
+				savedPath := filepath.Clean(filepath.Join(stelrDir, "wallpaper"+ext))
+				dst, err := os.OpenFile(savedPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 				if err != nil {
 					statusLabel.SetText("Error saving wallpaper: " + err.Error())
 					return
@@ -1141,10 +1163,13 @@ func main() {
 
 				_, copyErr := io.Copy(dst, reader)
 				closeErr := dst.Close()
-
 				if copyErr != nil || closeErr != nil {
 					statusLabel.SetText("Error saving wallpaper: " + fmt.Sprintf("%v %v", copyErr, closeErr))
 					return
+				}
+
+				if old := myApp.Preferences().String("wallpaper_path"); old != savedPath {
+					removeSavedWallpaper(old)
 				}
 
 				myApp.Preferences().SetString("wallpaper_path", savedPath)
