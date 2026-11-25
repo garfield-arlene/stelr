@@ -4,15 +4,21 @@ import secrets
 import hashlib
 import importlib
 import logging
+import re
 import bcrypt
+from urllib.parse import parse_qsl, urlencode
 from functools import wraps
 from datetime import timedelta
 from flask import (Flask, render_template, request, redirect,
-                   url_for, jsonify, flash, session, g)
+                   url_for, jsonify, flash, session, g, send_file, abort)
 from flask_login import (LoginManager, UserMixin, login_user,
                          logout_user, login_required, current_user)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import wallpaper
+import secret_box
+from plugins.base import LinkQuery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -139,6 +145,8 @@ def login():
         if user_data and bcrypt.checkpw(password.encode(),
                                          user_data["password_hash"].encode()):
             login_user(User(user_data))
+            # "Change on every login" wallpapers key off this flag.
+            session.pop("wallpaper_seen", None)
             return redirect(request.args.get("next") or url_for("index"))
         flash("Invalid username or password.", "error")
     return render_template("login.html", app_name=APP_NAME, version=APP_VERSION,
@@ -183,48 +191,48 @@ def register():
 
 # ── Main app routes ────────────────────────────────────────────────────────
 
-RANK_OPS = {
-    "<":  lambda rank, val: rank < val,
-    "<=": lambda rank, val: rank <= val,
-    "==": lambda rank, val: rank == val,
-    ">=": lambda rank, val: rank >= val,
-    ">":  lambda rank, val: rank > val,
-}
+PAGE_SIZES = (10, 25, 50, 100, 250, 500)
+DEFAULT_PAGE_SIZE = 50
+API_MAX_PER_PAGE = 1000
+# Query-string keys that make up a dashboard view; used to send the user back
+# to the same filtered, sorted page after editing or deleting a link.
+VIEW_PARAMS = ("q", "rank_op", "rank_val", "group", "sort", "dir", "page")
 
 
-def filter_links(links, query, rank_op, rank_val):
-    if query:
-        q = query.lower()
-        links = [l for l in links if q in l.get("title", "").lower()
-                                   or q in l.get("url", "").lower()]
-    if rank_op in RANK_OPS and rank_val:
-        try:
-            rank_val_int = int(rank_val)
-        except ValueError:
-            return links
-        cmp = RANK_OPS[rank_op]
-        links = [l for l in links if cmp(l.get("rank", 0), rank_val_int)]
-    return links
+def _page_size_key(user_id) -> str:
+    # [A-Za-z0-9_-] only, so it's also a valid XML element name.
+    return "page_size_" + re.sub(r"[^A-Za-z0-9_-]", "", str(user_id))
 
 
-def filter_by_group(links, group_filter):
-    if group_filter == "__ungrouped__":
-        return [l for l in links if not l.get("group_id")]
-    if group_filter:
-        return [l for l in links if l.get("group_id") == group_filter]
-    return links
+def get_page_size(storage, user_id) -> int:
+    try:
+        size = int(storage.get_setting(_page_size_key(user_id), ""))
+    except ValueError:
+        return DEFAULT_PAGE_SIZE
+    return size if size in PAGE_SIZES else DEFAULT_PAGE_SIZE
 
 
-SORT_FIELDS = {
-    "rank":  lambda l: l.get("rank", 0),
-    "title": lambda l: l.get("title", "").lower(),
-    "url":   lambda l: l.get("url", "").lower(),
-}
+def _int_arg(args, name):
+    try:
+        return int(args.get(name, ""))
+    except ValueError:
+        return None
 
 
-def sort_links(links, sort_field, direction):
-    key_fn = SORT_FIELDS.get(sort_field, SORT_FIELDS["rank"])
-    return sorted(links, key=key_fn, reverse=(direction == "desc"))
+def link_query_from_args(args, page=1, per_page=None, clamp_page=True) -> LinkQuery:
+    return LinkQuery.build(q=args.get("q", ""), rank_op=args.get("rank_op", "").strip(),
+                           rank_val=args.get("rank_val", ""), group=args.get("group", ""),
+                           sort=args.get("sort", "rank").strip(),
+                           direction=args.get("dir", "asc").strip(),
+                           page=page, per_page=per_page, clamp_page=clamp_page)
+
+
+def redirect_to_view():
+    """Redirect to the dashboard view the form was posted from (filters,
+    sort and page), which the form passes back in its "view" field."""
+    params = [(k, v) for k, v in parse_qsl(request.form.get("view", ""))
+              if k in VIEW_PARAMS]
+    return redirect(url_for("index") + ("?" + urlencode(params) if params else ""))
 
 
 def resolve_group_id(storage, user_id, group_id):
@@ -239,32 +247,39 @@ def resolve_group_id(storage, user_id, group_id):
 @login_required
 def index():
     storage = get_storage()
-    links  = storage.get_all(current_user.id)
     groups = storage.get_groups(current_user.id)
     group_map = {g["id"]: g["name"] for g in groups}
     api_tokens = storage.get_api_tokens(current_user.id)
 
-    query        = request.args.get("q", "").strip()
-    rank_op      = request.args.get("rank_op", "").strip()
-    rank_val     = request.args.get("rank_val", "").strip()
-    group_filter = request.args.get("group", "").strip()
-    sort_field   = request.args.get("sort", "rank").strip()
-    sort_dir     = request.args.get("dir", "asc").strip()
-    if sort_dir not in ("asc", "desc"):
-        sort_dir = "asc"
-    if sort_field not in SORT_FIELDS:
-        sort_field = "rank"
+    # Rows per page is remembered per user, so it follows them across devices.
+    per_page = get_page_size(storage, current_user.id)
+    requested = _int_arg(request.args, "per_page")
+    if requested in PAGE_SIZES and requested != per_page:
+        per_page = requested
+        storage.set_setting(_page_size_key(current_user.id), str(per_page))
 
-    links = filter_links(links, query, rank_op, rank_val)
-    links = filter_by_group(links, group_filter)
-    links = sort_links(links, sort_field, sort_dir)
+    result = storage.query_links(current_user.id, link_query_from_args(
+        request.args, page=_int_arg(request.args, "page") or 1, per_page=per_page))
+    lq = result.query
+    view = urlencode([(k, v) for k, v in request.args.items(multi=True)
+                      if k in VIEW_PARAMS and k != "page"]
+                     + ([("page", lq.page)] if lq.page > 1 else []))
 
-    return render_template("index.html", links=links, groups=groups, group_map=group_map,
+    wp_settings = wallpaper.load_settings(storage, current_user.id)
+
+    return render_template("index.html", links=result.links, result=result,
+                           page_sizes=PAGE_SIZES, view=view,
+                           groups=groups, group_map=group_map,
                            api_tokens=api_tokens,
+                           wallpaper=wp_settings,
+                           wallpaper_image=wallpaper.current_image(wp_settings),
+                           wallpaper_providers=wallpaper.providers_for_template(storage),
                            backend=STORAGE_BACKEND, version=APP_VERSION, app_name=APP_NAME,
                            timeout=SESSION_TIMEOUT_MINUTES,
-                           filter_q=query, filter_rank_op=rank_op, filter_rank_val=rank_val,
-                           filter_group=group_filter, sort_field=sort_field, sort_dir=sort_dir)
+                           filter_q=request.args.get("q", "").strip(),
+                           filter_rank_op=request.args.get("rank_op", "").strip(),
+                           filter_rank_val=request.args.get("rank_val", "").strip(),
+                           filter_group=lq.group, sort_field=lq.sort, sort_dir=lq.direction)
 
 
 @app.route("/add", methods=["POST"])
@@ -305,7 +320,7 @@ def add():
 def delete(link_id):
     get_storage().delete(link_id, current_user.id)
     flash("Link deleted.", "info")
-    return redirect(url_for("index"))
+    return redirect_to_view()
 
 
 @app.route("/groups/create", methods=["POST"])
@@ -377,7 +392,7 @@ def update(link_id):
     storage.update(link_id, {"title": title, "url": url, "rank": rank, "group_id": group_id},
                     current_user.id)
     flash("Link updated.", "success")
-    return redirect(url_for("index"))
+    return redirect_to_view()
 
 
 # ── Admin routes ───────────────────────────────────────────────────────────
@@ -410,7 +425,46 @@ def admin():
                            version=APP_VERSION,
                            app_name=APP_NAME,
                            timeout=SESSION_TIMEOUT_MINUTES,
-                           reg_enabled=registration_enabled())
+                           reg_enabled=registration_enabled(),
+                           wallpaper_providers=wallpaper.providers_for_template(storage),
+                           pixabay_key=wallpaper.key_status(storage),
+                           secret_key_strong=secret_box.secret_key_is_strong(),
+                           secure_transport=_is_secure_transport())
+
+
+def _is_secure_transport():
+    """True if this request reached Stelr over HTTPS (directly or via a
+    TLS-terminating proxy) or from the same machine. Only used to warn the
+    admin before they type a secret into a form."""
+    if request.is_secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https":
+        return True
+    return (request.host.split(":")[0] in ("localhost", "127.0.0.1", "[::1]"))
+
+
+@app.route("/admin/wallpaper/pixabay_key", methods=["POST"])
+@login_required
+def admin_set_pixabay_key():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    try:
+        wallpaper.save_api_key(get_storage(), request.form.get("api_key", ""),
+                               f"{APP_NAME}/{APP_VERSION}")
+        flash("Pixabay API key verified and saved (encrypted).", "success")
+    except (wallpaper.WallpaperError, secret_box.SecretBoxError) as e:
+        flash(f"Pixabay API key not saved: {e}", "error")
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/wallpaper/pixabay_key/delete", methods=["POST"])
+@login_required
+def admin_delete_pixabay_key():
+    if not current_user.is_admin:
+        flash("Admin access required.", "error")
+        return redirect(url_for("index"))
+    wallpaper.delete_api_key(get_storage())
+    flash("Pixabay API key removed.", "success")
+    return redirect(url_for("admin"))
 
 
 @app.route("/admin/create_user", methods=["POST"])
@@ -499,6 +553,75 @@ def admin_toggle_registration():
     return redirect(url_for("admin"))
 
 
+# ── Wallpaper ──────────────────────────────────────────────────────────────
+
+def _wallpaper_json(image, settings):
+    if not image:
+        return {"image": None}
+    return {"image": {
+        "url": url_for("wallpaper_image", image_id=image["id"]),
+        "page": image.get("page", ""),
+        "user": image.get("user", ""),
+        "provider": wallpaper.PROVIDERS[settings["provider"]]["name"],
+    }}
+
+
+@app.route("/wallpaper/settings", methods=["POST"])
+@login_required
+def wallpaper_settings():
+    storage = get_storage()
+    existing = wallpaper.load_settings(storage, current_user.id)
+    settings = wallpaper.normalize_form(request.form, existing)
+    if settings["enabled"] and not wallpaper.provider_configured(storage, settings["provider"]):
+        settings["enabled"] = False
+        flash("Wallpaper needs an API key that the admin hasn't configured yet.", "error")
+    else:
+        # Different keywords or mode should show up right away rather
+        # than waiting for the next rotation.
+        if (settings["mode"], settings["keywords"]) != (existing["mode"], existing["keywords"]):
+            settings["current"] = None
+        flash("Wallpaper settings saved.", "success")
+    wallpaper.save_settings(storage, current_user.id, settings)
+    return redirect(url_for("index"))
+
+
+@app.route("/wallpaper/current", methods=["POST"])
+@login_required
+def wallpaper_current():
+    """Return the image to show, rotating it if due (or if next=1)."""
+    storage = get_storage()
+    force_new = request.args.get("next") == "1"
+    try:
+        image = wallpaper.resolve(storage, current_user.id,
+                                  f"{APP_NAME}/{APP_VERSION}",
+                                  session_flag=session.get("wallpaper_seen", False),
+                                  force_new=force_new)
+    except wallpaper.WallpaperError as e:
+        logger.warning(f"Wallpaper: {e}")
+        return jsonify({"image": None, "error": str(e)}), 200
+    session["wallpaper_seen"] = True
+    return jsonify(_wallpaper_json(image, wallpaper.load_settings(storage, current_user.id)))
+
+
+def _send_wallpaper(image_id):
+    try:
+        path = wallpaper.image_path(image_id)
+    except wallpaper.WallpaperError:
+        abort(404)
+    if not os.path.isfile(path):
+        abort(404)
+    # Image ids never change content, so clients can cache them for long;
+    # send_file also answers If-None-Match / If-Modified-Since with a 304.
+    return send_file(path, mimetype=wallpaper.image_mimetype(path),
+                     max_age=7 * 24 * 3600, conditional=True, etag=True)
+
+
+@app.route("/wallpaper/image/<int:image_id>")
+@login_required
+def wallpaper_image(image_id):
+    return _send_wallpaper(image_id)
+
+
 # ── API auth helpers ───────────────────────────────────────────────────────
 
 def _hash_token(token: str) -> str:
@@ -528,6 +651,20 @@ def api_auth_required(f):
             g.api_user_id = current_user.id
             return f(*args, **kwargs)
         return jsonify({"error": "Authentication required"}), 401
+    return wrapper
+
+
+def api_admin_required(f):
+    """api_auth_required, plus the caller must be an admin. The admin flag is
+    re-read from storage on every request, so demoting or deleting an admin
+    takes effect immediately, even for tokens they already hold."""
+    @api_auth_required
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user_data = get_storage().get_user_by_id(g.api_user_id)
+        if not user_data or not user_data.get("is_admin"):
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
     return wrapper
 
 
@@ -581,23 +718,29 @@ def api_revoke_token(token_id):
 @app.route("/api/links", methods=["GET"])
 @api_auth_required
 def api_links():
-    links = get_storage().get_all(g.api_user_id)
-
-    query        = request.args.get("q", "").strip()
-    rank_op      = request.args.get("rank_op", "").strip()
-    rank_val     = request.args.get("rank_val", "").strip()
-    group_filter = request.args.get("group", "").strip()
-    sort_field   = request.args.get("sort", "rank").strip()
-    sort_dir     = request.args.get("dir", "asc").strip()
-    if sort_dir not in ("asc", "desc"):
-        sort_dir = "asc"
-    if sort_field not in SORT_FIELDS:
-        sort_field = "rank"
-
-    links = filter_links(links, query, rank_op, rank_val)
-    links = filter_by_group(links, group_filter)
-    links = sort_links(links, sort_field, sort_dir)
-    return jsonify(links)
+    # Without page/per_page every matching link is returned, as before.
+    # With either, one page comes back and the X-Total-Count, X-Page,
+    # X-Per-Page and X-Total-Pages headers describe the rest.
+    page = _int_arg(request.args, "page")
+    per_page = _int_arg(request.args, "per_page")
+    paginate = page is not None or per_page is not None
+    if paginate:
+        if per_page is None:
+            per_page = DEFAULT_PAGE_SIZE
+        if not 1 <= per_page <= API_MAX_PER_PAGE:
+            return jsonify({"error": f"per_page must be between 1 and {API_MAX_PER_PAGE}"}), 400
+        if page is not None and page < 1:
+            return jsonify({"error": "page must be 1 or more"}), 400
+    result = get_storage().query_links(g.api_user_id, link_query_from_args(
+        request.args, page=page or 1, per_page=per_page if paginate else None,
+        clamp_page=False))
+    resp = jsonify(result.links)
+    if paginate:
+        resp.headers["X-Total-Count"] = str(result.total)
+        resp.headers["X-Page"] = str(result.query.page)
+        resp.headers["X-Per-Page"] = str(result.query.per_page)
+        resp.headers["X-Total-Pages"] = str(result.pages)
+    return resp
 
 
 @app.route("/api/links", methods=["POST"])
@@ -705,6 +848,160 @@ def api_rename_group(group_id):
 def api_delete_group(group_id):
     get_storage().delete_group(group_id, g.api_user_id)
     return jsonify({"status": "deleted"})
+
+
+# ── Wallpaper API ──────────────────────────────────────────────────────────
+#
+# Lets the desktop app (or any API client) show the same wallpaper the web
+# dashboard shows: same settings, same rotation, same cached image.
+
+def _api_wallpaper_payload(storage, user_id, image, error=None):
+    settings = wallpaper.load_settings(storage, user_id)
+    payload = {
+        "enabled": settings["enabled"],
+        "provider": settings["provider"],
+        "mode": settings["mode"],
+        "keywords": wallpaper.parse_keywords(settings["keywords"]),
+        "rotation": settings["rotation"],
+        "dim": settings["dim"],
+        "blur": settings["blur"],
+        "panel_opacity": settings["panel_opacity"],
+        "image": None,
+        "error": error,
+    }
+    if image:
+        provider_name = wallpaper.PROVIDERS[settings["provider"]]["name"]
+        try:
+            content_type = wallpaper.image_mimetype(wallpaper.image_path(image["id"]))
+        except (OSError, wallpaper.WallpaperError):
+            content_type = "image/jpeg"
+        payload["image"] = {
+            "id": image["id"],
+            "download_url": url_for("api_wallpaper_image_by_id", image_id=image["id"]),
+            "content_type": content_type,
+            "date": image.get("date", ""),
+            "user": image.get("user", ""),
+            "page": image.get("page", ""),
+            "provider": provider_name,
+            "credit": (f"Photo by {image['user']} on {provider_name}" if image.get("user")
+                       else f"Photo on {provider_name}"),
+        }
+    return payload
+
+
+def _api_resolve_wallpaper(force_new):
+    storage = get_storage()
+    # "Change on every login" maps to "every app launch" for API clients:
+    # they pass session_start=1 on their first call after starting up.
+    session_flag = request.args.get("session_start") != "1"
+    try:
+        image = wallpaper.resolve(storage, g.api_user_id, f"{APP_NAME}/{APP_VERSION}",
+                                  session_flag=session_flag, force_new=force_new)
+        return _api_wallpaper_payload(storage, g.api_user_id, image)
+    except wallpaper.WallpaperError as e:
+        logger.warning(f"Wallpaper (API): {e}")
+        # Keep showing the last good image if there is one.
+        fallback = wallpaper.current_image(wallpaper.load_settings(storage, g.api_user_id))
+        return _api_wallpaper_payload(storage, g.api_user_id, fallback, error=str(e))
+
+
+@app.route("/api/wallpaper", methods=["GET"])
+@api_auth_required
+def api_wallpaper():
+    """The user's wallpaper settings and current image, rotating it if due."""
+    return jsonify(_api_resolve_wallpaper(force_new=False))
+
+
+@app.route("/api/wallpaper/next", methods=["POST"])
+@api_auth_required
+def api_wallpaper_next():
+    """Pick a new image now (the web UI's "Next image" button)."""
+    storage = get_storage()
+    if not wallpaper.load_settings(storage, g.api_user_id)["enabled"]:
+        return jsonify({"error": "Wallpaper is turned off for this account."}), 409
+    return jsonify(_api_resolve_wallpaper(force_new=True))
+
+
+@app.route("/api/wallpaper/image", methods=["GET"])
+@api_auth_required
+def api_wallpaper_image():
+    """Download the user's current image (no rotation; call /api/wallpaper for that)."""
+    current = wallpaper.current_image(wallpaper.load_settings(get_storage(), g.api_user_id))
+    if not current:
+        return jsonify({"error": "No wallpaper image available."}), 404
+    return _send_wallpaper(current["id"])
+
+
+@app.route("/api/wallpaper/image/<int:image_id>", methods=["GET"])
+@api_auth_required
+def api_wallpaper_image_by_id(image_id):
+    """Download a specific cached image, e.g. the download_url from /api/wallpaper."""
+    if not os.path.isfile(wallpaper.image_path(image_id)):
+        return jsonify({"error": "Image not found (it may have expired from the cache)."}), 404
+    return _send_wallpaper(image_id)
+
+
+# ── Admin wallpaper API ────────────────────────────────────────────────────
+#
+# Server-wide wallpaper settings (the Admin page's Wallpaper Sources
+# section). Admin only. The API key is accepted but never returned.
+
+_INSECURE_KEY_WARNING = ("This request reached Stelr over plain HTTP, so the API key crossed "
+                         "the network unencrypted. Use HTTPS, or connect from the server itself.")
+
+
+def _api_admin_wallpaper_payload(storage):
+    status = wallpaper.key_status(storage)
+    return {
+        "providers": [dict(p, key={
+            "source": status["source"],   # "db", "env", or null
+            "hint": status["hint"],       # last 4 characters only
+            "error": status["error"],
+            "editable": status["source"] != "env",
+        }) for p in wallpaper.providers_for_template(storage)],
+        "secret_key_strong": secret_box.secret_key_is_strong(),
+    }
+
+
+@app.route("/api/admin/wallpaper", methods=["GET"])
+@api_admin_required
+def api_admin_wallpaper():
+    return jsonify(_api_admin_wallpaper_payload(get_storage()))
+
+
+@app.route("/api/admin/wallpaper/<provider>/key", methods=["PUT"])
+@api_admin_required
+def api_admin_set_wallpaper_key(provider):
+    if provider not in wallpaper.PROVIDERS:
+        return jsonify({"error": f"Unknown wallpaper provider '{provider}'"}), 404
+    storage = get_storage()
+    if wallpaper.key_status(storage)["source"] == "env":
+        return jsonify({"error": "The key is set with PIXABAY_API_KEY on the server and "
+                                 "can't be changed through the API."}), 409
+    data = _request_data()
+    try:
+        wallpaper.save_api_key(storage, data.get("api_key", ""), f"{APP_NAME}/{APP_VERSION}")
+    except secret_box.SecretBoxError as e:
+        return jsonify({"error": str(e)}), 409
+    except wallpaper.WallpaperError as e:
+        return jsonify({"error": str(e)}), 400
+    payload = _api_admin_wallpaper_payload(storage)
+    if not _is_secure_transport():
+        payload["warning"] = _INSECURE_KEY_WARNING
+    return jsonify(payload)
+
+
+@app.route("/api/admin/wallpaper/<provider>/key", methods=["DELETE"])
+@api_admin_required
+def api_admin_delete_wallpaper_key(provider):
+    if provider not in wallpaper.PROVIDERS:
+        return jsonify({"error": f"Unknown wallpaper provider '{provider}'"}), 404
+    storage = get_storage()
+    if wallpaper.key_status(storage)["source"] == "env":
+        return jsonify({"error": "The key is set with PIXABAY_API_KEY on the server and "
+                                 "can't be removed through the API."}), 409
+    wallpaper.delete_api_key(storage)
+    return jsonify(_api_admin_wallpaper_payload(storage))
 
 
 # ── Health ─────────────────────────────────────────────────────────────────

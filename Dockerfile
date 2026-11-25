@@ -24,6 +24,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY wallpaper.py .
+COPY secret_box.py .
 COPY VERSION .
 COPY entrypoint.sh .
 COPY plugins/ plugins/
