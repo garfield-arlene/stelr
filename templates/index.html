@@ -97,7 +97,9 @@
     #wallpaper.blur { filter: blur(6px); transform: scale(1.04); }
     #wallpaper-dim { z-index: -1; background: var(--bg); opacity: var(--wp-dim, 0.8); }
     body.has-wallpaper .table-wrap,
+    body.has-wallpaper .pager,
     body.has-wallpaper .container > .empty { background: var(--surface); border: 1px solid var(--border); }
+    body.has-wallpaper .pager { padding: 0.6rem 0.9rem; }
     body.has-wallpaper tbody tr:hover { background: rgba(255,255,255,0.04); }
     /* Frosted panels: the image shows through, but whatever is behind a
        panel is blurred and darkened first, so text keeps its contrast even
@@ -106,6 +108,7 @@
     @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
       body.has-wallpaper .add-panel,
       body.has-wallpaper .table-wrap,
+      body.has-wallpaper .pager,
       body.has-wallpaper .container > .empty,
       body.has-wallpaper .flash-list li {
         background: rgba(22,26,31,var(--wp-panel, 0.7));
@@ -144,7 +147,9 @@
     @media (max-width: 700px) { .filter-row, .group-row { grid-template-columns: 1fr; } }
     .entry-row + .entry-row { margin-top: 0.75rem; }
     .add-actions { display: flex; gap: 0.75rem; margin-top: 1rem; }
-    .table-toolbar { display: flex; justify-content: flex-end; margin-bottom: 0.75rem; }
+    /* Show/Hide URL: a clearly visible toggle, not a muted outline button. */
+    .btn.url-toggle { color: var(--text); background: var(--surface); border: 1px solid var(--accent2); }
+    .btn.url-toggle:hover, .btn.url-toggle:focus-visible { color: var(--accent2); background: rgba(0,153,255,0.12); }
     /* ── Pagination ── */
     .pager { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem;
              font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin: 0.75rem 0; }
@@ -456,6 +461,10 @@
       {{ 'link' if result.total == 1 else 'links' }}
       {% endif %}
     </div>
+    {% if not extra_class %}
+    <button type="button" class="btn btn-sm url-toggle" id="url-toggle-btn" onclick="toggleUrlColumn()"
+            aria-controls="links-table"><span class="when-shown">Hide URL</span><span class="when-hidden">Show URL</span></button>
+    {% endif %}
     <form method="GET" action="/">
       {% for k in ['q', 'rank_op', 'rank_val', 'group'] %}
         {% set v = request.args.get(k, '') %}
@@ -499,9 +508,6 @@
   {%- endmacro %}
 
   {% if links %}
-  <div class="table-toolbar">
-    <button type="button" class="btn btn-secondary btn-sm" id="url-toggle-btn" onclick="toggleUrlColumn()"><span class="when-shown">Hide URL</span><span class="when-hidden">Show URL</span></button>
-  </div>
   {{ pager() }}
   <div class="table-wrap">
     <table id="links-table">
